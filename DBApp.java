@@ -12,7 +12,7 @@ import exceptions.DBAppException;
 public class DBApp {
 
 	public DBApp() {
-		init():	
+		init();
 	}
 	
 	public void init(){	
