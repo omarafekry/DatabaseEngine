@@ -10,7 +10,7 @@ public class DBApp {
 	public void init(){	
 	}
 	
-	public void createTable(String strTableName, 
+	public void createTable(String strTableName,
 			String strClusteringKeyColumn,
 			Hashtable<String,String> htblColNameType,
 			Hashtable<String,String> htblColNameMin,
@@ -119,7 +119,7 @@ public class DBApp {
 				throw new DBAppException("Incorrect operator " + op);			
 		}
 		for (String op : strarrOperators) {
-			if (!op.equals("AND") &&!op.equals("OR"))
+			if (!op.equals("AND") && !op.equals("OR"))
 				throw new DBAppException("Incorrect operator " + op);
 		}
 	}
