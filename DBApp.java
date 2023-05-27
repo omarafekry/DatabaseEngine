@@ -8,11 +8,8 @@ import java.util.*;
 
 import com.opencsv.CSVReader;
 import com.opencsv.CSVWriter;
+import com.opencsv.exceptions.CsvException;
 
-import exceptions.DBAppException;
-import main.Column;
-import main.Table;
-import main.TablePages;
 
 
 public class DBApp {
@@ -30,7 +27,7 @@ public class DBApp {
 //		if (!DatabaseFolder.exists()){
 //			DatabaseFolder.mkdirs();
 //		}
-		
+		//check for indexes
 		tablePagesInfo = new ArrayList<TablePages>();
 	}
 	
@@ -67,7 +64,7 @@ public class DBApp {
 							String strClusteringKeyValue,
 							Hashtable<String,Object> htblColNameValue ) throws DBAppException {}
 	
-	public void deleteFromTable(String strTableName, Hashtable<String,Object> htblColNameValue) throws DBAppException, IOException{
+	public void deleteFromTable(String strTableName, Hashtable<String,Object> htblColNameValue) throws DBAppException, IOException, CsvException{
 		
 		//check if there is a table with the given name
 		if(!tableExists(strTableName)) {
@@ -114,7 +111,7 @@ public class DBApp {
 		
 	}
    
-    public void deleteFromPage(String strTableName, int pageNumber, Hashtable<String,Object> htblColNameValue) throws IOException {
+    public void deleteFromPage(String strTableName, int pageNumber, Hashtable<String,Object> htblColNameValue) throws IOException, CsvException, DBAppException {
     	
     	String pagePath = System.getProperty("user.dir") + File.separator + "Tables" + File.separator + strTableName + File.separator + pageNumber +".csv";
     	
@@ -165,7 +162,7 @@ public class DBApp {
 		
     }
     
-    public void shrinkTable(String strTableName, int numofPages) throws IOException {
+    public void shrinkTable(String strTableName, int numofPages) throws IOException, CsvException {
     	
     	String Path = System.getProperty("user.dir") + File.separator + "Tables" + File.separator + strTableName;
     	String currPagePath;
@@ -217,7 +214,7 @@ public class DBApp {
     	}
     }
     
-    public void deleteEmptyPages(String strTableName) throws IOException {
+    public void deleteEmptyPages(String strTableName) throws IOException, CsvException {
 		
 		String tablePath = System.getProperty("user.dir") + File.separator + "Tables" + File.separator + strTableName;
 		TablePages PagesInfo = null;
@@ -453,7 +450,7 @@ public class DBApp {
 		return false;
 	}
 	
-	public boolean colExists(String strTableName, String colName) throws IOException {
+	public boolean colExists(String strTableName, String colName) throws IOException, DBAppException {
 		
 		if(!tableExists(strTableName)) {
 			return false;
@@ -474,14 +471,10 @@ public class DBApp {
 		
 	}
 
-	public String[] getHeader(String strTableName) {
+	public String[] getHeader(String strTableName) throws DBAppException {
 	    	
 	    	Column[] metadataInfo = null;
-			try {
-				metadataInfo = Table.getColumns(strTableName);
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
+			metadataInfo = Table.getColumns(strTableName);
 			
 			String[] header = new String[metadataInfo.length];
 			
@@ -492,16 +485,12 @@ public class DBApp {
 	    	return header;
 	    }
 	    
-    public boolean iscorrectType(String strTableName, String colName, Object value){
+    public boolean iscorrectType(String strTableName, String colName, Object value) throws DBAppException{
 		
     	Column[] tableMetaData = null;
     	String correctType = "";
     	
-		try {
-			tableMetaData = Table.getColumns(strTableName);
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
+		tableMetaData = Table.getColumns(strTableName);
 		
 		for(Column c : tableMetaData) {
 			if(c.name.equals(colName)) {

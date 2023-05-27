@@ -1,7 +1,7 @@
 public class Bucket {
-    String fileName;
+    String path;
 
-    public Bucket(String fileName){
-        this.fileName = fileName;
+    public Bucket(String path){
+        this.path = path;
     }
 }
