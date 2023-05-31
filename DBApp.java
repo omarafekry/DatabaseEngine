@@ -6,6 +6,7 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
+
 import com.opencsv.CSVReader;
 import com.opencsv.CSVWriter;
 import com.opencsv.exceptions.CsvException;
@@ -13,7 +14,7 @@ import com.opencsv.exceptions.CsvException;
 
 
 public class DBApp {
-
+	ArrayList<Index> indexes;
 	ArrayList<TablePages> tablePagesInfo;
 	
 	public DBApp() {
@@ -21,13 +22,13 @@ public class DBApp {
 	}
 	
 	public void init(){	
-		String Path = System.getProperty("user.dir");
+		//String Path = System.getProperty("user.dir");
 		// Create the Database folder that will have all the files of the database (optional)
 //		File DatabaseFolder = new File(Path + File.separator + "Database");
 //		if (!DatabaseFolder.exists()){
 //			DatabaseFolder.mkdirs();
 //		}
-		//check for indexes
+		//TODO: populate indexes arraylist
 		tablePagesInfo = new ArrayList<TablePages>();
 	}
 	
@@ -58,11 +59,15 @@ public class DBApp {
 
 	public void createIndex(String strTableName, String[] strarrColName) throws DBAppException {}
 	
-	public void insertIntoTable(String strTableName, Hashtable<String,Object> htblColNameValue) throws DBAppException{}
+	public void insertIntoTable(String strTableName, Hashtable<String,Object> htblColNameValue) throws DBAppException{
+		//TODO: el insert ya3am
+		//TODO: use index for insert
+	}
 	
-	public void updateTable(String strTableName, 
-							String strClusteringKeyValue,
-							Hashtable<String,Object> htblColNameValue ) throws DBAppException {}
+	public void updateTable(String strTableName, String strClusteringKeyValue, Hashtable<String,Object> htblColNameValue ) throws DBAppException {
+		//TODO: el update ya3am
+		//TODO: use index for update
+	}
 	
 	public void deleteFromTable(String strTableName, Hashtable<String,Object> htblColNameValue) throws DBAppException, IOException, CsvException{
 		
@@ -72,7 +77,7 @@ public class DBApp {
 			return;
 		}
 		
-		Enumeration keys = htblColNameValue.keys();
+		Enumeration<String> keys = htblColNameValue.keys();
 		String key;
 		
 		//check if the columns are actually in the table and check if the type of the values are correct
@@ -92,7 +97,7 @@ public class DBApp {
 		}
 		
 		// get path of the table folder
-		String Path = System.getProperty("user.dir") + File.separator + "Database" + File.pathSeparator + strTableName;
+		//String Path = System.getProperty("user.dir") + File.separator + "Database" + File.pathSeparator + strTableName;
 		
 		//get number of pages in the table
 		int numofPages = 0;
@@ -101,12 +106,12 @@ public class DBApp {
 				numofPages = tp.getNumberofPages();
 			}
 		}
-		
+		//TODO: find page with index
 		for(int i=1; i<=numofPages; i++) {
 			deleteFromPage(strTableName, i, htblColNameValue);
 		}
 		
-		shrinkTable(strTableName, numofPages);
+		//shrinkTable(strTableName, numofPages);
 		deleteEmptyPages(strTableName);
 		
 	}
@@ -147,6 +152,7 @@ public class DBApp {
 			}	
 			
 			valuesFound = true;
+			csvreader.close();
 		}
 		
 		//delete the rows that should be deleted 
@@ -159,6 +165,7 @@ public class DBApp {
 			
 		csvwriter.writeAll(pageRows);	
 		writer.close();
+		csvwriter.close();
 		
     }
     
@@ -210,6 +217,7 @@ public class DBApp {
 				
 				currWriter.writeAll(currRows);
 				writer.close();
+				currWriter.close();
 				
     	}
     }
@@ -240,6 +248,7 @@ public class DBApp {
 				pageFile.delete();
 				newSize = newSize - 1;
 			}
+			csvreader.close();
 		}
 		
 		PagesInfo.setNumberofPages(newSize);
@@ -256,77 +265,182 @@ public class DBApp {
 			filereader.close();
 			
 			PagesInfo.setCurrRowNumber(rows.size()-1);
+			csvreader.close();
 		}
 	}
     
 	@SuppressWarnings("all")
 	public Iterator selectFromTable(SQLTerm[] arrSQLTerms, String[] strarrOperators) throws DBAppException{
 		validateSelection(arrSQLTerms, strarrOperators);
-		LinkedList<Hashtable<String, Comparable<Object>>> result = getSingleRelation(arrSQLTerms[0]);
+		LinkedList<Hashtable<String, Comparable<Object>>> result;
 
-		for (int i = 0; i < strarrOperators.length; i++) {
-			String operator = strarrOperators[i];
-			LinkedList<Hashtable<String, Comparable<Object>>> nextRelation = getSingleRelation(arrSQLTerms[i+1]);
-			if (operator.equals("AND")){
-				LinkedList<Hashtable<String, Comparable<Object>>> tempResult = new LinkedList<>();
-				for (Hashtable<String, Comparable<Object>> row	: result)
-					if (nextRelation.contains(row))
-						tempResult.addLast(row);
-				result = tempResult;
-			}
+		ArrayList<Index> tableIndexes = getTableIndexes(arrSQLTerms[0]._strTableName);
+		if (tableIndexes.size() > 0){
+			//collect adjacent terms with columns on a specific index together
+			ArrayList<SQLTermCollection> termCollections = getCollectedTerms(arrSQLTerms, strarrOperators, tableIndexes);
+			
+			//initialize result with the output of the first term
+			if (termCollections.get(0).index == null)
+				result = getSingleRelation(termCollections.get(0).terms[0]);
 			else{
-				for (Hashtable<String, Comparable<Object>> row	: nextRelation) 
-					if (!result.contains(row)) //i couldve changed the type to hashset but im lazy
-						result.addLast(row);
+				LinkedList<Hashtable<String, Comparable<Object>>> rowsInIndex = getRowsFromKeys(termCollections.get(0).index.getResult(termCollections.get(0).terms), termCollections.get(0).terms[0]._strTableName);
+				result = selectFromRows(rowsInIndex, arrSQLTerms, strarrOperators);
+			}
+			//get rest of terms' outputs
+			for (int i = 1; i < strarrOperators.length - 1; i++) {
+				LinkedList<Hashtable<String, Comparable<Object>>> nextRelation = getSingleRelation(arrSQLTerms[i+1]);
+				if (termCollections.get(i).index == null)
+					nextRelation = getSingleRelation(termCollections.get(i).terms[i]);
+				else{
+					//Assuming selection is done on a single table i.e. no joins
+					LinkedList<Hashtable<String, Comparable<Object>>> rowsInIndex = getRowsFromKeys(termCollections.get(i).index.getResult(termCollections.get(i).terms), termCollections.get(i).terms[0]._strTableName);
+					nextRelation = selectFromRows(rowsInIndex, arrSQLTerms, strarrOperators);
+				}
+				result = performOperation(result, nextRelation, termCollections.get(i).operator);
 			}
 		}
+		else{
+			result = getSingleRelation(arrSQLTerms[0]);
 
+			for (int i = 0; i < strarrOperators.length; i++) {
+				String operator = strarrOperators[i];
+				LinkedList<Hashtable<String, Comparable<Object>>> nextRelation = getSingleRelation(arrSQLTerms[i+1]);
+				result = performOperation(result, nextRelation, operator);
+			}
+		}
 		return result.iterator();
 	}
 
+	public LinkedList<Hashtable<String, Comparable<Object>>> selectFromRows(LinkedList<Hashtable<String, Comparable<Object>>> rows, SQLTerm[] arrSQLTerms, String[] strarrOperators) throws DBAppException{
+		LinkedList<Hashtable<String, Comparable<Object>>> result = select(rows, arrSQLTerms[0]);
+
+		for (int i = 0; i < strarrOperators.length; i++) {
+			String operator = strarrOperators[i];
+			LinkedList<Hashtable<String, Comparable<Object>>> nextRelation = select(rows, arrSQLTerms[i+1]);
+			result = performOperation(result, nextRelation, operator);
+		}
+
+		return result;
+	}
+
+	private LinkedList<Hashtable<String, Comparable<Object>>> getRowsFromKeys(LinkedList<BucketEntry> entries, String tableName) throws DBAppException {
+		LinkedList<Hashtable<String, Comparable<Object>>> result = new LinkedList<>();
+		Hashtable<Object, Hashtable<String, Comparable<Object>>> page = new Hashtable<>();
+		//get rows from bucket entries
+		if (entries.size() > 0)
+			page = Table.getPageHashtable(tableName, entries.get(0).page);
+		for (int i = 0; i < entries.size(); i++) {
+			int currentPageNumber = entries.get(i).page;
+			while(i < entries.size() && entries.get(i).page == currentPageNumber){
+				Object key = entries.get(i).key;
+				Hashtable<String, Comparable<Object>> rowInIndex = page.get(key);
+				result.addLast(rowInIndex);
+				i++;
+			}
+			if (i < entries.size())
+				page = Table.getPageHashtable(tableName, entries.get(i).page);
+			i--;
+		}
+		return result;
+	}
+
+	public LinkedList<Hashtable<String, Comparable<Object>>> performOperation(LinkedList<Hashtable<String, Comparable<Object>>> relation1, LinkedList<Hashtable<String, Comparable<Object>>> relation2, String operator){
+		if (operator.equals("AND")){
+			LinkedList<Hashtable<String, Comparable<Object>>> tempResult = new LinkedList<>();
+			for (Hashtable<String, Comparable<Object>> row	: relation1)
+				if (relation2.contains(row))
+					tempResult.addLast(row);
+			relation1 = tempResult;
+		}
+		else{
+			for (Hashtable<String, Comparable<Object>> row	: relation2) 
+				if (!relation1.contains(row)) //i couldve changed the type to hashset but im lazy
+					relation1.addLast(row);
+		}
+		return relation1;
+	}
+	private ArrayList<SQLTermCollection> getCollectedTerms(SQLTerm[] arrSQLTerms, String[] strarrOperators, ArrayList<Index> indexes) {
+		ArrayList<SQLTermCollection> collections = new ArrayList<>();
+		for (int i = 0; i < arrSQLTerms.length; i++) {
+			int numberOfCollectedTerms = 1;
+			Index currentIndex = getIndexOfColumn(indexes, arrSQLTerms[i]._strColumnName);
+
+			for (int j = 0; j < 3 && i + j < arrSQLTerms.length - 1; j++) {
+				if (currentIndex.equals(getIndexOfColumn(indexes, arrSQLTerms[i + j]._strColumnName)) && strarrOperators[i - 1 + j].equals("AND"))
+					numberOfCollectedTerms++;
+			}
+			SQLTerm[] collection = new SQLTerm[numberOfCollectedTerms];
+			for (int j = 0; j < numberOfCollectedTerms; j++) 
+				collection[j] = arrSQLTerms[i + j];
+			
+			if (i + numberOfCollectedTerms < strarrOperators.length)
+				collections.add(new SQLTermCollection(collection, currentIndex, strarrOperators[i + numberOfCollectedTerms]));
+			else
+				collections.add(new SQLTermCollection(collection, currentIndex, ""));
+			
+			i += numberOfCollectedTerms - 1;
+		}
+		return collections;
+	}
+	public Index getIndexOfColumn(ArrayList<Index> indexes, String colName){
+		for (Index index : indexes) {
+			if (index.column1.name.equals(colName) || index.column2.name.equals(colName))
+				return index;
+		}
+		return null;
+	}
+	private ArrayList<Index> getTableIndexes(String tableName) {
+		ArrayList<Index> result = new ArrayList<Index>(); 
+		for (Index index : indexes) {
+			if (index.tableName.equals(tableName))
+				result.add(index);
+		}
+		return result;
+	}
+	public LinkedList<Hashtable<String, Comparable<Object>>> select(LinkedList<Hashtable<String, Comparable<Object>>> rows, SQLTerm term){
+		LinkedList<Hashtable<String, Comparable<Object>>> result = new LinkedList<>();
+		switch(term._strOperator){
+			case ">":
+				for (Hashtable<String, Comparable<Object>> row : rows) {
+					if (row.get(term._strColumnName).compareTo(term._objValue) > 0)
+						result.addLast(row);
+				}
+				break;
+			case ">=":
+				for (Hashtable<String, Comparable<Object>> row : rows) {
+					if (row.get(term._strColumnName).compareTo(term._objValue) >= 0)
+						result.addLast(row);
+				}
+				break;
+			case "=":
+				for (Hashtable<String, Comparable<Object>> row : rows) {
+					if (row.get(term._strColumnName).compareTo(term._objValue) == 0)
+						result.addLast(row);
+				}
+				break;
+			case "<=":
+				for (Hashtable<String, Comparable<Object>> row : rows) {
+					if (row.get(term._strColumnName).compareTo(term._objValue) <= 0)
+						result.addLast(row);
+				}
+				break;
+			case "<":
+				for (Hashtable<String, Comparable<Object>> row : rows) {
+					if (row.get(term._strColumnName).compareTo(term._objValue) < 0)
+						result.addLast(row);
+				}
+				break;
+		}
+		return result;
+	}
 	private LinkedList<Hashtable<String, Comparable<Object>>> getSingleRelation(SQLTerm term) throws DBAppException{
 		LinkedList<Hashtable<String, Comparable<Object>>> result = new LinkedList<>();
-
-		//check for index here
-
 		Table table = new Table(term._strTableName);
 		LinkedList<Hashtable<String, Comparable<Object>>> page;
 
-		while((page = table.nextPage()) != null){
-			switch(term._strOperator){
-				case ">":
-					for (Hashtable<String, Comparable<Object>> row : page) {
-						if (row.get(term._strColumnName).compareTo(term._objValue) > 0)
-							result.addLast(row);
-					}
-					break;
-				case ">=":
-					for (Hashtable<String, Comparable<Object>> row : page) {
-						if (row.get(term._strColumnName).compareTo(term._objValue) >= 0)
-							result.addLast(row);
-					}
-					break;
-				case "=":
-					for (Hashtable<String, Comparable<Object>> row : page) {
-						if (row.get(term._strColumnName).compareTo(term._objValue) == 0)
-							result.addLast(row);
-					}
-					break;
-				case "<=":
-					for (Hashtable<String, Comparable<Object>> row : page) {
-						if (row.get(term._strColumnName).compareTo(term._objValue) <= 0)
-							result.addLast(row);
-					}
-					break;
-				case "<":
-					for (Hashtable<String, Comparable<Object>> row : page) {
-						if (row.get(term._strColumnName).compareTo(term._objValue) < 0)
-							result.addLast(row);
-					}
-					break;
-			}
-			
-		}
+		while((page = table.nextPage()) != null)
+			result.addAll(select(page, term));
+		
 		return result;
 	}
 
@@ -365,9 +479,8 @@ public class DBApp {
 		
 		List<String[]> newMetaData = new ArrayList<String[]>();
 		
-		Enumeration names = htblColNameType.keys();
+		Enumeration<String> names = htblColNameType.keys();
 		String key;
-		int i = 0;
 		
 		// get all the meta-data values of the table
 		while(names.hasMoreElements()) {
@@ -418,7 +531,6 @@ public class DBApp {
 			
 			newMetaData.add(row);
 			
-			i++;
 		}
 		
 		//put all the meta-data values in the metadata.csv
@@ -500,10 +612,9 @@ public class DBApp {
 		}
 		
 		if(correctType.equals("java.utl.Date") && value instanceof Date) {
-			 Date date = null;
-		        try {
+			 try {
 		            SimpleDateFormat sdf = new SimpleDateFormat("dd.mm.yyyy");
-		            date = sdf.parse(value.toString());
+		            sdf.parse(value.toString());
 		        } catch (ParseException ex) {
 		        	System.out.println("date is not the right format");
 		        	return false;

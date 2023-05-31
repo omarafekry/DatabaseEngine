@@ -17,6 +17,7 @@ public class Cell {
     }
 
     public void insertRow(Object key, int page) {
+        // TODO: Insert key next to same page
         try{
             BufferedWriter output = new BufferedWriter(new FileWriter(firstBucket.path, true));
             if (!new File(firstBucket.path).exists())
@@ -29,13 +30,13 @@ public class Cell {
     }
 
 
-    public void deleteRow(int key) {
+    public void deleteRow(Object key) {
         CSVReader reader = null;
         try{
             reader = new CSVReader(new FileReader(firstBucket.path));
             List<String[]> lines = reader.readAll();
             for (String[] strings : lines) {
-                if (strings[0].equals("" + key)){
+                if (strings[0].equals("" + key.toString())){
                     lines.remove(strings);
                     break;
                 }
@@ -44,7 +45,7 @@ public class Cell {
             e.printStackTrace();
         }
     }
-    public void updateRow(int key, int page){
+    public void updateRow(Object key, int page){
         deleteRow(key);
         insertRow(key, page);
     }
