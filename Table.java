@@ -54,6 +54,44 @@ public class Table{
         nextPage++;
         return rows;
     }
+    @SuppressWarnings("all")
+    public static Hashtable<Object, Hashtable<String, Comparable<Object>>> getPageHashtable(String tableName, int pageNumber) throws DBAppException{
+        BufferedReader br = null;
+        Hashtable<Object, Hashtable<String, Comparable<Object>>> page = new Hashtable<>();
+        Column[] columns = getColumns(tableName);
+        try {
+            br = new BufferedReader(new FileReader(new File("Tables/" + tableName + "/" + pageNumber + ".csv")));
+            String line;
+            while((line = br.readLine()) != null){
+                String[] values = line.split(delimitter);
+                Hashtable<String, Comparable<Object>> row = new Hashtable<>();
+                for (int i = 0; i < columns.length; i++) {
+                    if (columns[i].type.equals("java.lang.Integer"))
+                        row.put(columns[i].name, (Comparable<Object>)(Object)((Integer)Integer.parseInt(values[i])));
+                    else if(columns[i].type.equals("java.lang.String"))
+                        row.put(columns[i].name, (Comparable<Object>)(Object)values[i]);
+                    else if(columns[i].type.equals("java.lang.Double"))
+                        row.put(columns[i].name, (Comparable<Object>)(Object)Double.parseDouble(values[i]));
+                    else if(columns[i].type.equals("java.util.Date")){
+                        SimpleDateFormat formatter = new SimpleDateFormat("DD.MM.YYYY");
+                        Date date = null;
+                        try {
+                            date = formatter.parse(values[i]);
+                        } catch (ParseException e) {
+                            e.printStackTrace();
+                        }
+                        row.put(columns[i].name, (Comparable<Object>)(Object)date);
+                    }
+                }
+                page.put(row.get(columns[0].name), row);
+            }
+            br.close();
+        } catch (IOException e) {
+            return null;
+        }
+        return page;
+    }
+    
     public void resetPages(){
         nextPage = 0;
     }

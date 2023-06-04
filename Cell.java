@@ -1,47 +1,103 @@
-import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.util.Hashtable;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVWriter;
+import com.opencsv.exceptions.CsvException;
 
 public class Cell {
     Bucket firstBucket;
-    Comparable<Object> minFirstColumn, maxFirstColumn;
-    Comparable<Object> minSecondColumn, maxSecondColumn;
+    Object minFirstColumn;
+    Object minSecondColumn;
 
-    public static void main(String[] args) throws IOException, DBAppException {
-        Cell cell = new Cell(0, 0);
-        Hashtable<String, Object> row = new Hashtable<>();
+    public Cell(int x, int y, String tableName, String indexName){
+        firstBucket = new Bucket("Tables/" + tableName + "/Indexes/" + indexName + "/" + x + "_" + y + ".csv");
     }
 
-    public Cell(int x, int y){
-        firstBucket = new Bucket("" + x + "_" + y + ".csv");
-    }
-
-    public void insertRow(String strTableName, Hashtable<String,Object> row) throws IOException, DBAppException{
-        Column[] columns = Table.getColumns(strTableName);
-        BufferedWriter output = new BufferedWriter(new FileWriter(firstBucket.fileName, true));
-        if (!new File(firstBucket.fileName).exists()){
-            new File(firstBucket.fileName).createNewFile();
-            output.append(getRowString(row, columns));
-            output.close();
-            return;
+    public ArrayList<BucketEntry> getEntries(String clusteringKeyType){
+        ArrayList<BucketEntry> entries = new ArrayList<>();
+        if (!new File(firstBucket.path).exists()) return entries;
+        CSVReader reader = null;
+        try{
+            reader = new CSVReader(new FileReader(firstBucket.path));
+            List<String[]> lines = reader.readAll();
+             
+            if (clusteringKeyType.equals("java.lang.Integer"))
+                for (String[] strings : lines)
+                    entries.add(new BucketEntry(Integer.parseInt(strings[0]), Integer.parseInt(strings[1])));
+            else if(clusteringKeyType.equals("java.lang.String"))
+                for (String[] strings : lines)
+                    entries.add(new BucketEntry(strings[0], Integer.parseInt(strings[1])));
+            else if(clusteringKeyType.equals("java.lang.Double"))
+                for (String[] strings : lines)
+                    entries.add(new BucketEntry(Double.parseDouble(strings[0]), Integer.parseInt(strings[1])));
+            else if(clusteringKeyType.equals("java.util.Date")){
+                for (String[] strings : lines){
+                    SimpleDateFormat formatter = new SimpleDateFormat("DD.MM.YYYY");
+                    Date date = null;
+                    try {
+                        date = formatter.parse(strings[0]);
+                    } catch (ParseException e) {
+                        e.printStackTrace();
+                    }
+                    entries.add(new BucketEntry(date, Integer.parseInt(strings[1])));
+                }
+            }
+            
+        } catch(IOException | CsvException e){
+            e.printStackTrace();
         }
-        output.append(getRowString(row, columns));
-        output.close();
+        return entries;
     }
 
-    public String getRowString(Hashtable<String,Object> row, Column[] columns){
-        String result = row.get(columns[0].name).toString();
-        for (int i = 1; i < columns.length; i++) {
-            result += "," + row.get(columns[i].name).toString();
+    public void insertRow(Object key, int page) {       
+        CSVReader reader = null;
+        try{
+            if (!new File(firstBucket.path).exists())
+                new File(firstBucket.path).createNewFile();
+            reader = new CSVReader(new FileReader(firstBucket.path));
+            List<String[]> lines = reader.readAll();
+            for (int i = 0; i < lines.size(); i++) {
+                if (lines.get(i)[1].equals("" + page)){
+                    lines.add(i, new String[]{key.toString(), "" + page});
+                    CSVWriter writer = new CSVWriter(new FileWriter(firstBucket.path));
+                    writer.writeAll(lines);
+                    break;
+                }
+            }
+            lines.add(new String[]{key.toString(), "" + page});
+            CSVWriter writer = new CSVWriter(new FileWriter(firstBucket.path));
+            writer.writeAll(lines);
+        } catch(IOException | CsvException e){
+            e.printStackTrace();
         }
-        return result;
     }
 
-    public void deleteRow(String strTableName, Hashtable<String,Object> row){}
-    public void updateRow(String strTableName, Hashtable<String,Object> row) throws IOException, DBAppException{
-        deleteRow(strTableName, row);
-        insertRow(strTableName, row);
+
+
+    public void deleteRow(Object key) {
+        CSVReader reader = null;
+        try{
+            reader = new CSVReader(new FileReader(firstBucket.path));
+            List<String[]> lines = reader.readAll();
+            for (String[] strings : lines) {
+                if (strings[0].equals("" + key.toString())){
+                    lines.remove(strings);
+                    break;
+                }
+            }
+        } catch(IOException | CsvException e){
+            e.printStackTrace();
+        }
+    }
+    public void updateRow(Object key, int page){
+        deleteRow(key);
+        insertRow(key, page);
     }
 }
