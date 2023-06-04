@@ -3,12 +3,11 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Hashtable;
-import java.util.LinkedList;
 
 public class Index {
     final int largestDivisions = Integer.parseInt(System.getProperty("indexDivisions"));
     ArrayList<ArrayList<Cell>> grid = new ArrayList<>();
-    String tableName, indexName;
+    String tableName, indexName, clusteringKeyType;
     Column column1, column2;
 
     public Index(String tableName, String column1Name, String column2Name) throws DBAppException{
@@ -20,6 +19,8 @@ public class Index {
                 this.column1 = columns[i];
             if (column2Name.equals(columns[i].name))
                 this.column2 = columns[i];
+            if (columns[i].clusteringKey)
+                clusteringKeyType = columns[i].type;
         }
         this.indexName = column1.name + column2.name;
 
@@ -128,9 +129,67 @@ public class Index {
             }
         }
     }
-    public LinkedList<BucketEntry> getResult(SQLTerm[] terms){
-        //TODO: return results from index
-        return null;
+    public ArrayList<BucketEntry> getResult(SQLTerm[] terms){
+        ArrayList<Cell> result = findCells(terms[0]);
+        for (int i = 1; i < terms.length; i++) {
+            ArrayList<Cell> nextResult = findCells(terms[i]);
+            for (Cell cell : result) {
+                if (!nextResult.contains(cell))
+                    result.remove(cell);
+                }
+        }
+        ArrayList<BucketEntry> entries = new ArrayList<>();
+        for (Cell cell : result) 
+            entries.addAll(cell.getEntries(clusteringKeyType));
+        return entries;
+    }
+    @SuppressWarnings("all")
+    public ArrayList<Cell> findCells(SQLTerm term){
+        ArrayList<Cell> result = new ArrayList<>();
+        if (term._strColumnName.equals(column1.name)){
+            for (int i = 0; i < grid.size(); i++){
+                //finding the exact value row
+                if (i < grid.get(0).size() - 1 
+                && compareObjects((Comparable<Object>)grid.get(i).get(0).minSecondColumn, "<=", (Comparable<Object>)term._objValue)
+                && compareObjects((Comparable<Object>)grid.get(i+1).get(0).minSecondColumn, ">", (Comparable<Object>)term._objValue)){
+                    result.addAll(grid.get(i));
+                    continue;
+                }
+                if (compareObjects((Comparable<Object>)grid.get(i).get(0).minFirstColumn, term._strOperator, (Comparable<Object>)term._objValue))
+                    result.addAll(grid.get(i));
+            }
+        }
+        else{
+            for (int i = 0; i < grid.get(0).size(); i++){
+                //finding the exact value column
+                if (i < grid.get(0).size() - 1 
+                && compareObjects((Comparable<Object>)grid.get(0).get(i).minSecondColumn, "<=", (Comparable<Object>)term._objValue)
+                && compareObjects((Comparable<Object>)grid.get(0).get(i+1).minSecondColumn, ">", (Comparable<Object>)term._objValue)){
+                    for (int j = 0; j < grid.size(); j++)
+                        result.add(grid.get(j).get(i));
+                    continue;
+                }
+                if (compareObjects((Comparable<Object>)grid.get(0).get(i).minSecondColumn, term._strOperator, (Comparable<Object>)term._objValue))
+                    for (int j = 0; j < grid.size(); j++)
+                        result.add(grid.get(j).get(i));
+            }
+        }
+        return result;
+    }
+    public boolean compareObjects(Comparable<Object> obj1, String operator, Comparable<Object> obj2){
+        switch(operator){
+            case ">":
+                return obj1.compareTo(obj2) > 0; //not always correct
+            case ">=":
+                return obj1.compareTo(obj2) >= 0; //not always correct
+            case "=":
+                return obj1.compareTo(obj2) == 0; //not always correct
+            case "<=":
+                return obj1.compareTo(obj2) <= 0; //correct
+            case "<":
+                return obj1.compareTo(obj2) < 0; //correct
+        }
+        return false;
     }
     public int[] findPages(Hashtable<String, Comparable<Object>> row){
         //TODO: get page from row

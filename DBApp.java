@@ -106,7 +106,7 @@ public class DBApp {
 				numofPages = tp.getNumberofPages();
 			}
 		}
-		//TODO: find page with index
+		//TODO: find pages with index
 		for(int i=1; i<=numofPages; i++) {
 			deleteFromPage(strTableName, i, htblColNameValue);
 		}
@@ -323,7 +323,7 @@ public class DBApp {
 		return result;
 	}
 
-	private LinkedList<Hashtable<String, Comparable<Object>>> getRowsFromKeys(LinkedList<BucketEntry> entries, String tableName) throws DBAppException {
+	private LinkedList<Hashtable<String, Comparable<Object>>> getRowsFromKeys(ArrayList<BucketEntry> entries, String tableName) throws DBAppException {
 		LinkedList<Hashtable<String, Comparable<Object>>> result = new LinkedList<>();
 		Hashtable<Object, Hashtable<String, Comparable<Object>>> page = new Hashtable<>();
 		//get rows from bucket entries
