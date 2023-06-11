@@ -1,4 +1,6 @@
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -11,6 +13,12 @@ import com.opencsv.CSVReader;
 import com.opencsv.CSVWriter;
 import com.opencsv.exceptions.CsvException;
 
+import exceptions.DBAppException;
+import main.Column;
+import main.Index;
+import main.Table;
+import main.TablePages;
+
 
 
 public class DBApp {
@@ -22,17 +30,24 @@ public class DBApp {
 	}
 	
 	public void init(){	
-		//String Path = System.getProperty("user.dir");
-		// Create the Database folder that will have all the files of the database (optional)
-//		File DatabaseFolder = new File(Path + File.separator + "Database");
-//		if (!DatabaseFolder.exists()){
-//			DatabaseFolder.mkdirs();
-//		}
+		
+		String Path = System.getProperty("user.dir");
+		String DBAppConfigPath = Path + "/resources" + "/DBApp.config";
+		Properties appProps = new Properties();
+		try {
+			appProps.load(new FileInputStream(DBAppConfigPath));
+			MaximumRowsCountinTablePage = Integer.parseInt(appProps.getProperty("MaximumRowsCountinTablePage"));
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
 		//TODO: populate indexes arraylist
 		tablePagesInfo = new ArrayList<TablePages>();
 	}
 	
-	public void createTable(String strTableName,
+	public void createTable(String strTableName, 
 			String strClusteringKeyColumn,
 			Hashtable<String,String> htblColNameType,
 			Hashtable<String,String> htblColNameMin,
@@ -45,6 +60,9 @@ public class DBApp {
 		File tableFolder = new File(Path + File.separator + "Tables" + File.separator + strTableName);
 		if(!tableFolder.exists()) {
 			
+			//validate the table creation first
+			validateTableCreation(strTableName, strClusteringKeyColumn, htblColNameType, htblColNameMin, htblColNameMax, htblForeignKeys, computedCols);
+			
 			// Create Table Folder with table name. This will contain the pages of the table.
 			tableFolder.mkdirs();
 			
@@ -54,27 +72,226 @@ public class DBApp {
 		
 			// creates new TablePages Class to store relevant information about the pages of the table
 			tablePagesInfo.add(new TablePages(strTableName));
-	
+			
 	}
 
 	public void createIndex(String strTableName, String[] strarrColName) throws DBAppException {}
 	
-	public void insertIntoTable(String strTableName, Hashtable<String,Object> htblColNameValue) throws DBAppException{
-		//TODO: el insert ya3am
-		//TODO: use index for insert
+	public void insertIntoTable(String strTableName, Hashtable<String,Object> htblColNameValue) throws DBAppException, IOException{
+		
+		if(!tableExists(strTableName)) {
+			throw new DBAppException("The table " + strTableName + " does not exist");
+		}
+		
+		String[] header = getHeader(strTableName);
+		Column clusteringKey = Table.getClusteringKey(strTableName);
+		System.out.println(clusteringKey.name);
+		Object keyValue = htblColNameValue.get(clusteringKey.name);
+		int keyColNum = 0;
+		TablePages pagesInfo = null;
+		Index index = null;
+		
+		for(TablePages tp: tablePagesInfo) {
+			pagesInfo = tp;
+		}
+		
+		for(Index i: indexes) {
+			if(strTableName.equals(i.tableName) && (clusteringKey.name.equals(i.column1.name) || clusteringKey.name.equals(i.column2.name))) {
+				index = i;
+			}
+		}
+		
+		String[] rowtoInsert = new String[header.length];
+		for(int i=0; i<header.length; i++){
+			Object colValue = htblColNameValue.get(header[i]);
+			if(colValue==null) {
+				throw new DBAppException("Value for " + header[i] + " is not givin");
+			}
+			if(!iscorrectType(strTableName, header[i], colValue)) {
+				throw new DBAppException("Incorrect data type for column " + header[i]);
+			}
+			if(clusteringKey.name.equals(header[i])) {
+				keyColNum = i;
+			}	
+			
+			rowtoInsert[i] = "" + colValue;
+		}	
+		
+		if(index!=null) {
+			//insert using the index
+			if(keyValue==null) {
+				throw new DBAppException("There is no value for the clusteringKey");
+			}
+				
+			Hashtable<String,Object> values = new Hashtable<String,Object>();
+			values.put(clusteringKey.name, keyValue);
+			int insertionPage = index.findPageforInsertion(values);
+			
+			if(insertionPage == -1) {
+				createPage(strTableName, pagesInfo);
+				insertionPage = 0;
+			}
+			
+			List<String[]> Rows = readPage(strTableName, insertionPage);
+			List<String[]> newRows = new ArrayList<String[]>();
+			newRows.add(Rows.get(0));
+			boolean found = false;
+			for(int i=1; i< Rows.size(); i++) {
+			
+				if(!found && Compare(keyValue, setType(Rows.get(i)[keyColNum], clusteringKey.type))==-1) {
+					newRows.add(rowtoInsert);
+					found = true;
+				}
+				
+				newRows.add(Rows.get(i));
+			}
+			
+			if(!found) {
+				newRows.add(rowtoInsert);
+			}
+			
+			if(newRows.size() > MaximumRowsCountinTablePage+1) {
+				pushDownTable(strTableName, insertionPage,  newRows.remove(newRows.size()-1), pagesInfo);
+			}
+		}
+		else {
+			System.out.println("entered insertion without index");
+			ArrayList<Integer> allPages = pagesInfo.getAllPages();
+			int insertionPage = -1;
+			
+			for(int i=0; i<allPages.size(); i++) {
+				List<String[]> Rows = readPage(strTableName, allPages.get(i));
+				if(Compare(keyValue, setType(Rows.get(Rows.size()-1)[keyColNum], clusteringKey.type))==-1) {
+					insertionPage = allPages.get(i);
+				}
+			}
+			
+			if(allPages.isEmpty()) {
+				createPage(strTableName, pagesInfo);
+			}
+			
+			if(insertionPage == -1 && !allPages.isEmpty()) {
+				insertionPage = allPages.get(allPages.size()-1); 
+			}
+			
+			List<String[]> Rows = readPage(strTableName, insertionPage);
+			List<String[]> newRows = new ArrayList<String[]>();
+			newRows.add(Rows.get(0));
+			boolean found = false;
+			for(int i=1; i< Rows.size(); i++) {
+				System.out.println(setType(Rows.get(i)[keyColNum], clusteringKey.type));
+				if(!found && Compare(keyValue, setType(Rows.get(i)[keyColNum], clusteringKey.type))==0) {
+					throw new DBAppException("This clustering already exists");
+				}
+				if(!found && Compare(keyValue, setType(Rows.get(i)[keyColNum], clusteringKey.type))==-1) {
+					newRows.add(rowtoInsert);
+					found = true;
+				}
+				
+				newRows.add(Rows.get(i));
+			}
+			
+			if(!found) {
+				newRows.add(rowtoInsert);
+			}
+			
+			for(Index i: indexes) {
+				if(strTableName.equals(i.tableName)){
+					i.insert(keyValue, htblColNameValue, insertionPage);
+				}
+			}
+			
+			if(newRows.size() > MaximumRowsCountinTablePage+1) {                   
+				pushDownTable(strTableName, insertionPage,  newRows.remove(newRows.size()-1), pagesInfo);
+			}
+			else {
+				writePage(strTableName, insertionPage, newRows);
+			}
+		
+		}
+		
+				
 	}
 	
-	public void updateTable(String strTableName, String strClusteringKeyValue, Hashtable<String,Object> htblColNameValue ) throws DBAppException {
-		//TODO: el update ya3am
-		//TODO: use index for update
-	}
+	public void updateTable(String strTableName, 
+							String strClusteringKeyValue,
+							Hashtable<String,Object> htblColNameValue ) throws DBAppException, IOException {
+
+		if(!tableExists(strTableName)) {
+		throw new DBAppException("The table " + strTableName + " does not exist");
+		}
+		
+		String[] header = getHeader(strTableName);
+		Column clusteringKey = Table.getClusteringKey(strTableName);
+		TablePages pagesInfo = null;
+		Index index = null;
+		int keyColNum = -1;
+		
+		if(!checkType(strClusteringKeyValue, clusteringKey.type)) {
+		throw new DBAppException("The clustering key value has an incorrect data type");
+		}
+		
+		Object keyValue = setType(strClusteringKeyValue, clusteringKey.type);
+		
+		for(TablePages tp: tablePagesInfo) {
+		pagesInfo = tp;
+		}
+		
+		for(int i=0; i<header.length; i++) {
+		if(clusteringKey.name.equals(header[i])) {
+		keyColNum=i;
+		}
+		}
+		
+		for(Index i: indexes) {
+		if(strTableName.equals(i.tableName) && (clusteringKey.name.equals(i.column1.name) || clusteringKey.name.equals(i.column2.name))) {
+		index = i;
+		}
+		}		
+		
+		int updatePage = -1;
+		if(index!=null) {
+		
+		}
+		else {
+		ArrayList<Integer> allPages = pagesInfo.getAllPages();
+		
+		for(int i=0; i<allPages.size(); i++) {
+		List<String[]> Rows = readPage(strTableName, allPages.get(i));
+		if(Compare(keyValue, setType(Rows.get(Rows.size()-1)[keyColNum], clusteringKey.type))==-1) {
+			updatePage = allPages.get(i);
+		}
+		}
+		
+		if(updatePage==-1) {
+		updatePage = allPages.get(allPages.size()-1);
+		}
+		}
+		
+		List<String[]> Rows = readPage(strTableName, updatePage);
+		for(String[] r : Rows) {
+		if(r[keyColNum].equals(strClusteringKeyValue)) {
+		for(int i=0; i<header.length; i++) {
+			Object value = htblColNameValue.get(header[i]);
+			if(value!=null) {
+				if(!iscorrectType(strTableName, header[i], value)) {
+					throw new DBAppException("The value for column " + header[i] + " has an incorrect data type");
+				}
+				r[i] = value+"";
+			}
+		}
+		
+		}
+		}
+		writePage(strTableName, updatePage, Rows);
+		}
+
 	
-	public void deleteFromTable(String strTableName, Hashtable<String,Object> htblColNameValue) throws DBAppException, IOException, CsvException{
+	public void deleteFromTable(String strTableName, Hashtable<String,Object> htblColNameValue) throws DBAppException, IOException{
 		
 		//check if there is a table with the given name
 		if(!tableExists(strTableName)) {
-			System.out.println("There is no table with this name");
-			return;
+			throw new DBAppException("The table " + strTableName + " does not exist");
 		}
 		
 		Enumeration<String> keys = htblColNameValue.keys();
@@ -86,88 +303,71 @@ public class DBApp {
 			Object value = htblColNameValue.get(key);
 			
 			if(!colExists(strTableName, key)) {
-				System.out.println(key + " column does not exist");
-				return;
+				throw new DBAppException("The column " + key + " does not exist");
 			}
 			
 			if(!iscorrectType(strTableName, key, value)) {
 				throw new DBAppException("The value of column " + key + " is an incorrect data type");
 			}
-			
 		}
 		
 		// get path of the table folder
-		//String Path = System.getProperty("user.dir") + File.separator + "Database" + File.pathSeparator + strTableName;
+		String Path = System.getProperty("user.dir") + File.separator + "Database" + File.pathSeparator + strTableName;
 		
-		//get number of pages in the table
-		int numofPages = 0;
+		//get all of pages in the table
+		ArrayList<Integer> allPages = null;
 		for(TablePages tp : tablePagesInfo) {
 			if(tp.getTableName().equals(strTableName)) {
-				numofPages = tp.getNumberofPages();
+				allPages = tp.getAllPages();
 			}
 		}
-		//TODO: find pages with index
-		for(int i=1; i<=numofPages; i++) {
-			deleteFromPage(strTableName, i, htblColNameValue);
+		
+		for(int i=0; i<allPages.size(); i++) {
+			deleteFromPage(strTableName, allPages.get(i), htblColNameValue);
 		}
 		
-		//shrinkTable(strTableName, numofPages);
 		deleteEmptyPages(strTableName);
 		
 	}
    
-    public void deleteFromPage(String strTableName, int pageNumber, Hashtable<String,Object> htblColNameValue) throws IOException, CsvException, DBAppException {
-    	
-    	String pagePath = System.getProperty("user.dir") + File.separator + "Tables" + File.separator + strTableName + File.separator + pageNumber +".csv";
-    	
-    	File pageFile = new File(pagePath);
-    	
-    	//get all the rows of the page
-    	List<String[]> pageRows = null;
-		
-		FileReader filereader = new FileReader(pageFile);
-		CSVReader csvreader = new CSVReader(filereader);
-		
-		pageRows = csvreader.readAll();
-		filereader.close();
-		
-		String[] header = getHeader(strTableName);
-		
-		//find the rows that need to be deleted
-		List<String[]> toBeRemoved = new ArrayList<String[]>();
-		for(int i=0; i<pageRows.size(); i++) {
+	 public void deleteFromPage(String strTableName, int pageNumber, Hashtable<String,Object> htblColNameValue) throws IOException, DBAppException {
+	    	
+	    	if(!pageExists(strTableName, pageNumber))
+	    		throw new DBAppException("Page " + pageNumber + " does not exist in the table " +  strTableName);
+	    	
+	    	//get all the rows of the page
+	    	List<String[]> pageRows = readPage(strTableName, pageNumber);
 			
-			String[] row = pageRows.get(i);
-			boolean valuesFound = true;
+			String[] header = getHeader(strTableName);
 			
-			for(int j=0; j<header.length; j++) {
-				Object value = htblColNameValue.get(header[j]);
-				if(value!=null && !(value.toString().equals(row[j]))){
-					valuesFound = false;
+			//find the rows that need to be deleted
+			List<String[]> toBeRemoved = new ArrayList<String[]>();
+			for(int i=0; i<pageRows.size(); i++) {
+				
+				String[] row = pageRows.get(i);
+				boolean valuesFound = true;
+				
+				for(int j=0; j<header.length; j++) {
+					Object value = htblColNameValue.get(header[j]);
+					if(value!=null && !(value.toString().equals(row[j]))){
+						valuesFound = false;
+					}
 				}
+				
+				if(valuesFound) {
+					toBeRemoved.add(pageRows.get(i));
+				}	
+				
+				valuesFound = true;
 			}
 			
-			if(valuesFound) {
-				toBeRemoved.add(pageRows.get(i));
-			}	
+			//delete the rows that should be deleted 
+			pageRows.removeAll(toBeRemoved);
 			
-			valuesFound = true;
-			csvreader.close();
-		}
-		
-		//delete the rows that should be deleted 
-		pageRows.removeAll(toBeRemoved);
-		
-		//write the rest of the rows back to the page file
-
-		FileWriter writer = new FileWriter(pageFile);
-		CSVWriter csvwriter = new CSVWriter(writer);
+			//write the rest of the rows back to the page file
+			writePage(strTableName, pageNumber, pageRows);
 			
-		csvwriter.writeAll(pageRows);	
-		writer.close();
-		csvwriter.close();
-		
-    }
+	    }
     
     public void shrinkTable(String strTableName, int numofPages) throws IOException, CsvException {
     	
@@ -222,7 +422,7 @@ public class DBApp {
     	}
     }
     
-    public void deleteEmptyPages(String strTableName) throws IOException, CsvException {
+    public void deleteEmptyPages(String strTableName) throws IOException, DBAppException {
 		
 		String tablePath = System.getProperty("user.dir") + File.separator + "Tables" + File.separator + strTableName;
 		TablePages PagesInfo = null;
@@ -232,41 +432,19 @@ public class DBApp {
 			}
 		}
 		
-		int newSize = PagesInfo.getNumberofPages();
-		for(int i=1; i<=PagesInfo.getNumberofPages(); i++) {
-			String pagePath = tablePath + File.separator + i +".csv";
+		ArrayList<Integer> allPages = PagesInfo.getAllPages();
+		for(int i=0; i<allPages.size(); i++) {
+			String pagePath = tablePath + File.separator + allPages.get(i) +".csv";
 			File pageFile = new File(pagePath);
 			
-			List<String[]> rows = new ArrayList<String[]>();
-			
-			FileReader filereader = new FileReader(pageFile);
-			CSVReader csvreader = new CSVReader(filereader);
-			rows = csvreader.readAll();
-			filereader.close();
+			List<String[]> rows = readPage(strTableName, i);
 			
 			if(rows.size()==1) {
 				pageFile.delete();
-				newSize = newSize - 1;
+				PagesInfo.removePage(allPages.get(i));
 			}
-			csvreader.close();
 		}
 		
-		PagesInfo.setNumberofPages(newSize);
-		
-		if(newSize!=0) {
-			String pagePath = tablePath + File.separator + newSize +".csv"; 
-			File pageFile = new File(pagePath);
-			
-			List<String[]> rows = new ArrayList<String[]>();
-			
-			FileReader filereader = new FileReader(pageFile);
-			CSVReader csvreader = new CSVReader(filereader);
-			rows = csvreader.readAll();
-			filereader.close();
-			
-			PagesInfo.setCurrRowNumber(rows.size()-1);
-			csvreader.close();
-		}
 	}
     
 	@SuppressWarnings("all")
@@ -487,6 +665,8 @@ public class DBApp {
 			String[] row = new String[12];
 			key = (String) names.nextElement();
 			System.out.println(key);
+			
+			System.out.println(key);
 			String type = htblColNameType.get(key);
 			String min = htblColNameMin.get(key);
 			String max = htblColNameMax.get(key);
@@ -507,8 +687,8 @@ public class DBApp {
 			row[7] = max;
 			if(ForeginKey!=null) {
 				row[8] = "True";
-				row[9] = ForeginKey.split("[.]", 0)[0];
-				row[10] = ForeginKey.split("[.]", 0)[1];
+				row[9] = ForeginKey.split(".")[0];
+				row[10] = ForeginKey.split(".")[1];
 			}
 			else {
 				row[8] = "False";
@@ -551,6 +731,66 @@ public class DBApp {
 		
 	}
 	
+	public boolean validateTableCreation(String strTableName, 
+			String strClusteringKeyColumn,
+			Hashtable<String,String> htblColNameType,
+			Hashtable<String,String> htblColNameMin,
+			Hashtable<String,String> htblColNameMax,
+			Hashtable<String,String> htblForeignKeys,
+			String[] computedCols) throws DBAppException, IOException {
+		
+		Enumeration<String> keys = htblColNameType.keys();
+		List<String> colNames = new ArrayList<>();
+		
+		while(keys.hasMoreElements()) {
+			colNames.add(keys.nextElement());
+		}
+		
+		//check if strClusteringKeyColumn exists
+		boolean clustringKeyExists = false;
+		for(String colName : colNames) { 
+			String type = htblColNameType.get(colName);
+			String min = htblColNameMin.get(colName);
+			String max = htblColNameMax.get(colName);
+			String ForeginKey = htblForeignKeys.get(colName);
+			
+			if(min==null) {
+				throw new DBAppException("A min value for " + colName + " is not provided");
+			}	
+				
+			if(max==null) {
+				throw new DBAppException("A max value for " + colName + " is not provided");
+			}
+			
+			if(!checkType(type, min)) {
+				throw new DBAppException("min value for " + colName + " has an incorrect data type");
+			}
+			
+			if(!checkType(type, max)) {
+				throw new DBAppException("max value for " + colName + " has an incorrect data type");
+			}
+			
+			if(ForeginKey!=null) {
+				System.out.println(ForeginKey);
+				if(!colExists(ForeginKey.split("[.]",0)[0], ForeginKey.split("[.]",0)[1])) {
+					throw new DBAppException("The Foregin Key " + ForeginKey + " does not exist");
+				}	
+			}
+			
+			if(strClusteringKeyColumn.equals(colName)) {
+				clustringKeyExists = true;
+			}
+			
+		}
+		
+		if(!clustringKeyExists) {
+			throw new DBAppException("There name of the clustering key is incorrect");
+		}
+		
+		return true;
+		
+	}
+	
 	public boolean tableExists(String strTableName) {
 		
 		for(TablePages tp : tablePagesInfo) {
@@ -562,6 +802,22 @@ public class DBApp {
 		return false;
 	}
 	
+	public boolean pageExists(String strTableName, int pageNumber) {
+		
+		int numofPages = 0;
+		
+		for(TablePages tp : tablePagesInfo) {
+			if(tp.getTableName().equals(strTableName)) {
+				numofPages = tp.getNumberofPages();
+			}
+		}
+		
+		if(pageNumber + 1 <= numofPages)
+			return true;
+		
+		return false;
+	}
+
 	public boolean colExists(String strTableName, String colName) throws IOException, DBAppException {
 		
 		if(!tableExists(strTableName)) {
@@ -639,4 +895,241 @@ public class DBApp {
 	
 	}
 	
+    public boolean checkType(String Type, String value) throws DBAppException{
+
+		if(Type.equals("java.util.Date")) {
+			 Date date = null;
+		        try {
+		            SimpleDateFormat sdf = new SimpleDateFormat("dd.mm.yyyy");
+		            date = sdf.parse(value.toString());
+		        } catch (ParseException ex) {
+		        	return false;
+		        }
+			return true;
+		}
+		
+		
+		if(Type.equals("java.lang.Integer")){
+			try {
+		       Integer i = Integer.parseInt(value);
+		    } catch (NumberFormatException nfe) {
+		        return false;
+		    }
+			
+			return true;
+		}
+		if(Type.equals("java.lang.Double")){
+			try {
+			    Double d = Double.parseDouble(value);
+			} catch (NumberFormatException nfe) {
+			    return false;
+			}
+			
+			return true;
+		}
+		
+		if(Type.equals("java.lang.String")){
+			return true;
+		}
+		
+		return false;
+	
+	}
+    
+    public void createPage(String strTableName, TablePages tp) throws DBAppException{
+		String tablePath = System.getProperty("user.dir") + File.separator + "Tables" + File.separator + strTableName;
+	
+		int newPageNumber = tp.getNextPagetoCreate();
+		
+		File newPageFile = new File(tablePath + File.separator + (newPageNumber) + ".csv");
+		try {
+			FileWriter outputfile = new FileWriter(newPageFile);
+			CSVWriter writer =  new CSVWriter(outputfile);
+			
+			String[] header = getHeader(strTableName);
+			
+            writer.writeNext(header);
+            writer.close();
+			
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
+		tp.addPage(newPageNumber);
+	}
+	
+    
+    public List<String[]> readPage(String strTableName, int pageNumber) throws DBAppException {
+    	
+    	String pagePath = System.getProperty("user.dir") + File.separator + "Tables" + File.separator + strTableName + File.separator + pageNumber +".csv";
+    	File pageFile = new File(pagePath);
+    	
+    	List<String[]> pageRows = null;
+		
+		try {
+			FileReader filereader = new FileReader(pageFile);
+			CSVReader csvreader = new CSVReader(filereader);
+			pageRows = csvreader.readAll();
+			filereader.close();
+			csvreader.close();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+		return pageRows;
+		
+    }
+    
+    public void writePage(String strTableName, int pageNumber, List<String[]> rows) {
+    	
+    	String pagePath = System.getProperty("user.dir") + File.separator + "Tables" + File.separator + strTableName + File.separator + pageNumber +".csv";
+    	File pageFile = new File(pagePath);
+    	
+		try {
+			FileWriter writer = new FileWriter(pageFile);
+			CSVWriter csvwriter = new CSVWriter(writer);
+			
+			csvwriter.writeAll(rows);	
+			
+			writer.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
+    }
+    
+    public void pushDownTable(String strTableName, int currPage, String[] rowtoPush, TablePages tp) throws DBAppException {
+    	
+    	ArrayList<Integer> allPages = tp.getAllPages();
+    	int insertionPage = -1;
+    	for(int i = 0; i<allPages.size(); i++) {
+    		if(currPage==allPages.get(i) && i<allPages.size()-1) {
+    			insertionPage = allPages.get(i+1);
+    		}
+    	}
+    	
+    	if(insertionPage==-1) {
+    		createPage(strTableName, tp);
+    		insertionPage = allPages.get(allPages.size()-1);
+    	}
+    	
+    	updateIndexes(strTableName, rowtoPush, insertionPage);
+    	
+    	List<String[]> Rows = readPage(strTableName, insertionPage);
+    	List<String[]> newRows = new ArrayList<String[]>();
+    	newRows.add(Rows.get(0));
+    	newRows.add(rowtoPush);
+    	
+    	for(int i=2; i<Rows.size();i++) {
+    		newRows.add(Rows.get(i));
+    	}
+    	
+    	if(newRows.size()>MaximumRowsCountinTablePage+1) {
+    		String[] newRowtoPush = newRows.remove(newRows.size()-1);
+    		writePage(strTableName, insertionPage, newRows);
+    		pushDownTable(strTableName, insertionPage, newRowtoPush, tp);
+    	}
+    	else {
+    		writePage(strTableName, insertionPage, newRows);
+    	}
+    	
+    	
+    	
+    }
+
+    public void updateIndexes(String strTableName, String[] rowtoUpdate, int newPageNum) throws DBAppException {
+    	Hashtable<String, Object> values = new Hashtable<String, Object>();
+    	String[] header = getHeader(strTableName);
+    	Object Clusteringkey = null;
+    	
+    	for(int i=0; i<header.length; i++) {
+    		Column[] columns = Table.getColumns(strTableName);
+    		String type = null;
+    		
+    		for(Column c : columns) {
+    			if(c.name.equals(header[i])) {
+    				type = c.type;
+    			}
+    			if(c.clusteringKey) {
+    				Clusteringkey = setType(rowtoUpdate[i], type);
+    			}
+    		}
+    		
+    		values.put(header[i], setType(rowtoUpdate[i], type));
+    	}
+    	
+    	for(Index i : indexes) {
+    		if(i.tableName.equals(strTableName)) {
+    			//i.update(Clusteringkey, values, newPageNum);
+    		}
+    	}
+    	
+    }
+	
+	public Object setType( String value, String type) {
+    	Object result = null;
+    	
+    	switch(type) {
+    	case "java.lang.Integer": result = Integer.parseInt(value); break;
+		case "java.lang.Double": result = Double.parseDouble(value); break;
+		case "java.lang.String": result = value; break;
+		case "java.util.Date": SimpleDateFormat sdf = new SimpleDateFormat("dd.mm.yyyy");
+			try {
+				result = sdf.parse(value.toString());
+			} catch (ParseException e) {
+				e.printStackTrace();
+			} break;
+    	}
+    	
+    	return result;
+    } 
+    
+    public int Compare(Object value1, Object value2) {
+    	
+        if(value1 instanceof Integer && value2 instanceof Integer) {
+        	if ((Integer)(value1) < (Integer)(value2)){
+               return -1;
+            }
+        	if ((Integer)(value1) > (Integer)(value2)){
+                return 1;
+             }
+        	return 0;
+        }
+        
+        if(value1 instanceof Double && value2 instanceof Double) {
+        	if ((Double)(value1) < (Double)(value2)){
+               return -1;
+            }
+        	if ((Double)(value1) > (Double)(value2)){
+                return 1;
+             }
+        	return 0;
+        }
+        
+        if(value1 instanceof String && value2 instanceof String) {
+        	if (((String) value1).length() < ((String)value2).length()){
+               return -1;
+            }
+        	if (((String) value1).length() > ((String)value2).length()){
+                return 1;
+             }
+        	return 0;
+        }
+        
+        if(value1 instanceof Date && value2 instanceof Date) {
+        	if (((Date) value1).before((Date)value2)){
+               return -1;
+            }
+        	if (((Date) value1).after((Date)value2)){
+                return 1;
+             }
+        	return 0;
+        }
+  
+       return -2;
+    }
+    
+    
+
 }

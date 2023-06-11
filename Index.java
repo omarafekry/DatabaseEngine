@@ -1,8 +1,16 @@
+import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Hashtable;
+import java.util.List;
+
+import exceptions.DBAppException;
+import main.BucketEntry;
+import main.Cell;
+import main.Column;
+import main.Table;
 
 public class Index {
     final int largestDivisions = Integer.parseInt(System.getProperty("indexDivisions"));
@@ -236,6 +244,195 @@ public class Index {
             }
         }
         return grid.get(x).get(y);
+    }
+
+    public ArrayList<Cell> getCells(Hashtable<String, Object> values){
+ 	   boolean col1 = false;
+ 	   if(values.get(column1.name) != null) {
+ 		   col1 = true;
+ 	   }
+
+ 	   ArrayList<Cell> result = new ArrayList<Cell>();
+ 	   
+        for (int i = 0; i < grid.size() - 1; i++) {
+     	   boolean found1 = false, found2 = false;
+            for (int j = 0; j < grid.get(i).size() - 1; j++) {
+         	   if(col1) {
+ 	        	   switch(column1.type){
+ 	               case "java.lang.Integer":
+ 	                    if ((Integer)(values.get(column1.name)) < (Integer)(grid.get(i + 1).get(j + 1)).minFirstColumn){
+ 	                        found1 = true;
+ 	                    } break;
+ 	               case "java.lang.Double":
+ 	                   if ((Double)(values.get(column1.name)) < (Double)(grid.get(i + 1).get(j + 1)).minFirstColumn){
+ 	                       found1 = true;
+ 	                   } break;
+ 	               case "java.lang.String":
+ 	                   if (((String)values.get(column1.name)).length() < ((String)(grid.get(i + 1).get(j + 1)).minFirstColumn).length()){
+ 	                   		found1 = true;
+ 	                   } break;
+ 	               case "java.util.Date":
+ 	                   if (((Date)values.get(column1.name)).before((Date)(grid.get(i + 1).get(j + 1)).minFirstColumn)){
+ 	                   		found1 = true;
+ 	                   } break;
+ 	        	   }
+         	   }
+         	   else {
+ 	                switch(column2.type){
+ 	                case "java.lang.Integer":
+ 		                if ((Integer)(values.get(column2.name)) < (Integer)(grid.get(i + 1).get(j + 1)).minSecondColumn){
+ 		                	found2 = true;
+ 		                } break;
+ 	                case "java.lang.Double":
+ 	                    if ((Double)(values.get(column2.name)) < (Double)(grid.get(i + 1).get(j + 1)).minSecondColumn){
+ 	                    	found2 = true;
+ 	                    } break;
+ 	                case "java.lang.String":
+ 	                    if (((String)values.get(column2.name)).length() < ((String)(grid.get(i + 1).get(j + 1)).minSecondColumn).length()){
+ 	                    	found2 = true;
+ 	                    } break;
+ 	                case "java.util.Date":
+ 	                	if (((Date)values.get(column2.name)).before((Date)(grid.get(i + 1).get(j + 1)).minSecondColumn)){
+ 	                		found2 = true;
+ 	                    } break;
+ 	                }
+         	   }     
+ 	                
+ 	                if(found1 && col1) {
+ 	                	result = grid.get(i);
+ 	                	return result;   
+ 	                }	
+ 	                
+ 	                if(found2 && !col1) {
+ 	             	   result.add(grid.get(i).get(j));
+ 	             	   break;
+ 	                }
+            }
+        }
+        
+        if(col1)
+     	   return grid.get(grid.size()-1);
+        
+        if(result.size()==0) {
+     	   for (int i = 0; i < grid.size(); i++) {
+     		   int size = grid.get(i).size();
+     		   result.add(grid.get(i).get(size-1));
+     	   }
+        }
+
+        return result;
+    
+    } 		
+    
+    public int findPageforInsertion(Hashtable<String, Object> values) throws IOException, DBAppException {
+    	Column clusteringKey = Table.getClusteringKey(tableName);
+    	ArrayList<Cell> requiredCells = new ArrayList<Cell>();
+    	
+    	requiredCells = getCells(values);
+    
+    	int lowerPageNumber = -1, upperPageNumber = -1;
+    	Object lowerClosestValue = null, upperClosestValue = null;
+    	List<BucketEntry> cellContents;
+    	
+    	for(Cell c : requiredCells) {
+    		cellContents = c.getEntries(clusteringKey.type);
+    	
+    		Object cellValue = null;
+    		
+    		for(BucketEntry be : cellContents) {
+    			
+    			cellValue = be.key;
+	    		
+	    		if(Compare(cellValue, values.get(clusteringKey.name)) == -1) {
+	    			if(lowerClosestValue==null) {
+	    				lowerPageNumber = be.page;
+	    				lowerClosestValue = cellValue;
+	    			}
+	    			else if(Compare(cellValue, lowerClosestValue) == 1) {
+	    				lowerPageNumber = be.page;
+	    				lowerClosestValue = cellValue;
+	    			}
+	    		}
+	 
+	    		
+	    		if(Compare(cellValue, values.get(clusteringKey.name)) == 1) {
+	    			if(upperClosestValue==null) {
+	    				upperPageNumber = be.page;
+	    				upperClosestValue = cellValue;
+	    			}
+	    			else if(Compare(cellValue, upperClosestValue) == -1) {
+	    				upperPageNumber = be.page;
+	    				upperClosestValue = cellValue;
+	    			}
+	    		}
+    		}
+    	}
+    	
+    	if(lowerClosestValue!=null)
+    		return lowerPageNumber;
+
+    	if(upperClosestValue!=null)
+    		return upperPageNumber;
+    	
+    	return -1;
+    }
+
+    public Object setType(String type, String value) {
+    	Object result = null;
+    	
+    	switch(type) {
+    	case "java.lang.Integer": result = Integer.parseInt(value); break;
+		case "java.lang.Double": result = Double.parseDouble(value); break;
+		case "java.lang.String": result = value; break;
+		case "java.util.Date": result = LocalDateTime.parse(value); break;
+    	}
+    	
+    	return result;
+    } 
+    
+    public int Compare(Object value1, Object value2) {
+    	
+        if(value1 instanceof Integer && value2 instanceof Integer) {
+        	if ((Integer)(value1) < (Integer)(value2)){
+               return -1;
+            }
+        	if ((Integer)(value1) > (Integer)(value2)){
+                return 1;
+             }
+        	return 0;
+        }
+        
+        if(value1 instanceof Double && value2 instanceof Double) {
+        	if ((Double)(value1) < (Double)(value2)){
+               return -1;
+            }
+        	if ((Double)(value1) > (Double)(value2)){
+                return 1;
+             }
+        	return 0;
+        }
+        
+        if(value1 instanceof String && value2 instanceof String) {
+        	if (((String) value1).length() < ((String)value2).length()){
+               return -1;
+            }
+        	if (((String) value1).length() > ((String)value2).length()){
+                return 1;
+             }
+        	return 0;
+        }
+        
+        if(value1 instanceof Date && value2 instanceof Date) {
+        	if (((Date) value1).before((Date)value2)){
+               return -1;
+            }
+        	if (((Date) value1).after((Date)value2)){
+                return 1;
+             }
+        	return 0;
+        }
+  
+       return -2;
     }
 
 }

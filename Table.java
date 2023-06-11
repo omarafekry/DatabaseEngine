@@ -8,6 +8,9 @@ import java.util.Date;
 import java.util.Hashtable;
 import java.util.LinkedList;
 
+import exceptions.DBAppException;
+import main.Column;
+
 public class Table{
     private final static String delimitter = ",";
     String name;
@@ -133,5 +136,16 @@ public class Table{
         Column[] result = new Column[columns.size()];
         columns.toArray(result);
         return result;
+    }
+    
+    public static Column getClusteringKey(String tableName) throws IOException, DBAppException {
+    	Column[] tableColumns = getColumns(tableName);
+    	
+    	for(Column c: tableColumns) {
+    		if(c.clusteringKey)
+    			return c;
+    	}
+    	
+    	return null;
     }
 }
