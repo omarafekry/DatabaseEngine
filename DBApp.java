@@ -13,23 +13,36 @@ import com.opencsv.CSVReader;
 import com.opencsv.CSVWriter;
 import com.opencsv.exceptions.CsvException;
 
-import exceptions.DBAppException;
-import main.Column;
-import main.Index;
-import main.Table;
-import main.TablePages;
-
-
 
 public class DBApp {
-	ArrayList<Index> indexes;
-	ArrayList<TablePages> tablePagesInfo;
+	ArrayList<Index> indexes = new ArrayList<>();
+	ArrayList<TablePages> tablePagesInfo = new ArrayList<>();
+	int MaximumRowsCountinTablePage;
 	
-	public DBApp() {
+	public static void main(String[] args) throws DBAppException, CsvException, IOException {
+		DBApp dbApp = new DBApp();
+		// Hashtable<String, String> types = new Hashtable<>();
+		// types.put("ProductID", "java.lang.Integer");
+		// types.put("ProductName", "java.lang.String");
+		// types.put("ProductPrice", "java.lang.Double");
+		// Hashtable<String, String> min = new Hashtable<>();
+		// min.put("ProductID", "1");
+		// min.put("ProductName", "A");
+		// min.put("ProductPrice", "0");
+		// Hashtable<String, String> max = new Hashtable<>();
+		// max.put("ProductID", "100000");
+		// max.put("ProductName", "ZZZZZZZZZZZZZZZZZZ");
+		// max.put("ProductPrice", "99999999999");
+		// Hashtable<String, String> fkeys = new Hashtable<>();
+		// dbApp.createTable("Product2", "ProductID", types, min, max, fkeys, new String[]{});
+	}
+
+
+	public DBApp() throws DBAppException, CsvException {
 		init();
 	}
 	
-	public void init(){	
+	public void init() throws DBAppException, CsvException{	
 		
 		String Path = System.getProperty("user.dir");
 		String DBAppConfigPath = Path + "/resources" + "/DBApp.config";
@@ -42,9 +55,65 @@ public class DBApp {
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-		
-		//TODO: populate indexes arraylist
+		populateTables();
+		populateIndexes();
 		tablePagesInfo = new ArrayList<TablePages>();
+	}
+
+	public void populateTables() throws DBAppException, CsvException{
+        try {
+			File metadata = new File("metadata.csv");
+			if (!metadata.exists())
+				metadata.createNewFile();
+			CSVReader reader = new CSVReader(new FileReader(metadata));
+			
+
+            List<String[]> lines = reader.readAll();
+            for (int i = 0; i < lines.size(); i++) {
+				String tableName;
+				boolean found = false;
+				tableName = lines.get(i)[0];
+				for (TablePages tp : tablePagesInfo) {
+					if (tp.tableName.equals(tableName))
+						found = true;
+				}
+				if (!found)
+					tablePagesInfo.add(new TablePages(tableName));
+            }
+        } catch (IOException e) {
+            throw new DBAppException("Couldn't find metadata.csv");
+        }
+	}
+
+	public void populateIndexes() throws DBAppException, CsvException{
+        try {
+			CSVReader reader = new CSVReader(new FileReader(new File("metadata.csv")));
+            List<String[]> lines = reader.readAll();
+            for (int i = 0; i < lines.size(); i++) {
+                String indexName = lines.get(i)[4];
+				String tableName, column1, column2 = "";
+				if (!indexName.equals("")){
+					boolean found = false;
+					tableName = lines.get(i)[0];
+					column1 = lines.get(i)[1];
+					for (Index index : indexes) {
+						if (index.indexName.equals(indexName))
+							found = true;
+					}
+					if (!found){
+						for (int j = i + 1; j < lines.size(); j++) {
+							if (lines.get(i)[4].equals(indexName))
+								column2 = lines.get(i)[1];
+						}
+						if (column2 == "") throw new DBAppException("fe column leeh index bas msh la2y el column el tany");
+						indexes.add(new Index(tableName, column1, column2));
+					}
+				}
+                
+            }
+        } catch (IOException e) {
+            throw new DBAppException("Couldn't find metadata.csv");
+        }
 	}
 	
 	public void createTable(String strTableName, 
@@ -75,9 +144,14 @@ public class DBApp {
 			
 	}
 
-	public void createIndex(String strTableName, String[] strarrColName) throws DBAppException {}
+	public void createIndex(String strTableName, String[] strarrColName) throws DBAppException, IOException {
+		if (!tableExists(strTableName) || !colExists(strTableName, strarrColName[0]) || !colExists(strTableName, strarrColName[1]))
+			throw new DBAppException("fe 7aga msh mawgooda");
+		Index index = new Index(strTableName, strarrColName[0], strarrColName[1]);
+		indexes.add(index);
+	}
 	
-	public void insertIntoTable(String strTableName, Hashtable<String,Object> htblColNameValue) throws DBAppException, IOException{
+	public void insertIntoTable(String strTableName, Hashtable<String,Object> htblColNameValue) throws DBAppException, IOException, CsvException{
 		
 		if(!tableExists(strTableName)) {
 			throw new DBAppException("The table " + strTableName + " does not exist");
@@ -215,7 +289,7 @@ public class DBApp {
 	
 	public void updateTable(String strTableName, 
 							String strClusteringKeyValue,
-							Hashtable<String,Object> htblColNameValue ) throws DBAppException, IOException {
+							Hashtable<String,Object> htblColNameValue ) throws DBAppException, IOException, CsvException {
 
 		if(!tableExists(strTableName)) {
 		throw new DBAppException("The table " + strTableName + " does not exist");
@@ -287,7 +361,7 @@ public class DBApp {
 		}
 
 	
-	public void deleteFromTable(String strTableName, Hashtable<String,Object> htblColNameValue) throws DBAppException, IOException{
+	public void deleteFromTable(String strTableName, Hashtable<String,Object> htblColNameValue) throws DBAppException, IOException, CsvException{
 		
 		//check if there is a table with the given name
 		if(!tableExists(strTableName)) {
@@ -312,25 +386,72 @@ public class DBApp {
 		}
 		
 		// get path of the table folder
-		String Path = System.getProperty("user.dir") + File.separator + "Database" + File.pathSeparator + strTableName;
 		
 		//get all of pages in the table
-		ArrayList<Integer> allPages = null;
-		for(TablePages tp : tablePagesInfo) {
-			if(tp.getTableName().equals(strTableName)) {
-				allPages = tp.getAllPages();
+		ArrayList<Integer> pages = null;
+
+		ArrayList<Index> tableIndexes = getTableIndexes(strTableName);
+		if (tableIndexes.size() > 0){
+
+			//convert hashtable of column values to sqlterms
+			SQLTerm[] terms = new SQLTerm[htblColNameValue.size()];
+			Iterator<String> it = htblColNameValue.keys().asIterator();
+			int count = 0;
+			while(it.hasNext()) {
+				String columnName = it.next();
+				SQLTerm term = new SQLTerm();
+				term._strTableName = strTableName;
+				term._strColumnName = columnName;
+				term._objValue = htblColNameValue.get(columnName);
+				term._strOperator = "=";
+				terms[count] = term;
+				count++;
+			}
+			String[] operators = new String[terms.length - 1];
+			for (int i = 0; i < terms.length - 1; i++) {
+				operators[i] = "AND";
+			}
+			ArrayList<SQLTermCollection> termCollections = getCollectedTerms(terms, operators);
+			
+			//initialize result with the output of the first term
+			pages = new ArrayList<>(pages);
+			//get rest of terms' outputs
+			ArrayList<BucketEntry> entries = termCollections.get(0).index.getResult(termCollections.get(0).terms);
+			for (int i = 0; i < entries.size(); i++) 
+				pages.add(entries.get(i).page);
+			
+			for (int i = 1; i < operators.length - 1; i++) {
+				ArrayList<Integer> tempPages = new ArrayList<>();
+				if (termCollections.get(i).index != null){
+					entries = termCollections.get(i).index.getResult(termCollections.get(i).terms);
+					for (int j = 0; j < entries.size(); j++) 
+						tempPages.add(entries.get(j).page);
+				}
+				//anding
+				ArrayList<Integer> andedPages = new ArrayList<>();
+				for (int j = 0; j < tempPages.size(); j++) {
+					if (pages.contains(tempPages.get(i)))
+						andedPages.add(tempPages.get(i));
+				}
+				pages = andedPages;
 			}
 		}
-		
-		for(int i=0; i<allPages.size(); i++) {
-			deleteFromPage(strTableName, allPages.get(i), htblColNameValue);
+		else{
+			for(TablePages tp : tablePagesInfo) {
+				if(tp.getTableName().equals(strTableName)) {
+					pages = tp.getAllPages();
+				}
+			}
+		}
+		for(int i=0; i<pages.size(); i++) {
+			deleteFromPage(strTableName, pages.get(i), htblColNameValue);
 		}
 		
 		deleteEmptyPages(strTableName);
 		
 	}
    
-	 public void deleteFromPage(String strTableName, int pageNumber, Hashtable<String,Object> htblColNameValue) throws IOException, DBAppException {
+	 public void deleteFromPage(String strTableName, int pageNumber, Hashtable<String,Object> htblColNameValue) throws IOException, DBAppException, CsvException {
 	    	
 	    	if(!pageExists(strTableName, pageNumber))
 	    		throw new DBAppException("Page " + pageNumber + " does not exist in the table " +  strTableName);
@@ -422,7 +543,7 @@ public class DBApp {
     	}
     }
     
-    public void deleteEmptyPages(String strTableName) throws IOException, DBAppException {
+    public void deleteEmptyPages(String strTableName) throws IOException, DBAppException, CsvException {
 		
 		String tablePath = System.getProperty("user.dir") + File.separator + "Tables" + File.separator + strTableName;
 		TablePages PagesInfo = null;
@@ -455,7 +576,7 @@ public class DBApp {
 		ArrayList<Index> tableIndexes = getTableIndexes(arrSQLTerms[0]._strTableName);
 		if (tableIndexes.size() > 0){
 			//collect adjacent terms with columns on a specific index together
-			ArrayList<SQLTermCollection> termCollections = getCollectedTerms(arrSQLTerms, strarrOperators, tableIndexes);
+			ArrayList<SQLTermCollection> termCollections = getCollectedTerms(arrSQLTerms, strarrOperators);
 			
 			//initialize result with the output of the first term
 			if (termCollections.get(0).index == null)
@@ -537,7 +658,8 @@ public class DBApp {
 		}
 		return relation1;
 	}
-	private ArrayList<SQLTermCollection> getCollectedTerms(SQLTerm[] arrSQLTerms, String[] strarrOperators, ArrayList<Index> indexes) {
+	
+	private ArrayList<SQLTermCollection> getCollectedTerms(SQLTerm[] arrSQLTerms, String[] strarrOperators) {
 		ArrayList<SQLTermCollection> collections = new ArrayList<>();
 		for (int i = 0; i < arrSQLTerms.length; i++) {
 			int numberOfCollectedTerms = 1;
@@ -560,6 +682,7 @@ public class DBApp {
 		}
 		return collections;
 	}
+	
 	public Index getIndexOfColumn(ArrayList<Index> indexes, String colName){
 		for (Index index : indexes) {
 			if (index.column1.name.equals(colName) || index.column2.name.equals(colName))
@@ -614,10 +737,17 @@ public class DBApp {
 	private LinkedList<Hashtable<String, Comparable<Object>>> getSingleRelation(SQLTerm term) throws DBAppException{
 		LinkedList<Hashtable<String, Comparable<Object>>> result = new LinkedList<>();
 		Table table = new Table(term._strTableName);
+		TablePages tp = null;
+		for (TablePages tp2Pages : tablePagesInfo) {
+			if (tp2Pages.tableName.equals(term._strTableName))
+				tp = tp2Pages;
+		}
 		LinkedList<Hashtable<String, Comparable<Object>>> page;
-
-		while((page = table.nextPage()) != null)
+		int pageNumber = 0;
+		while((page = table.nextPage(pageNumber)) != null && pageNumber < tp.numberofPages){
 			result.addAll(select(page, term));
+			pageNumber++;
+		}
 		
 		return result;
 	}
@@ -959,7 +1089,7 @@ public class DBApp {
 	}
 	
     
-    public List<String[]> readPage(String strTableName, int pageNumber) throws DBAppException {
+    public List<String[]> readPage(String strTableName, int pageNumber) throws DBAppException, CsvException {
     	
     	String pagePath = System.getProperty("user.dir") + File.separator + "Tables" + File.separator + strTableName + File.separator + pageNumber +".csv";
     	File pageFile = new File(pagePath);
@@ -973,7 +1103,6 @@ public class DBApp {
 			filereader.close();
 			csvreader.close();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		
@@ -999,7 +1128,7 @@ public class DBApp {
 		
     }
     
-    public void pushDownTable(String strTableName, int currPage, String[] rowtoPush, TablePages tp) throws DBAppException {
+    public void pushDownTable(String strTableName, int currPage, String[] rowtoPush, TablePages tp) throws DBAppException, CsvException {
     	
     	ArrayList<Integer> allPages = tp.getAllPages();
     	int insertionPage = -1;
@@ -1061,7 +1190,7 @@ public class DBApp {
     	
     	for(Index i : indexes) {
     		if(i.tableName.equals(strTableName)) {
-    			//i.update(Clusteringkey, values, newPageNum);
+    			i.update(Clusteringkey, values, newPageNum);
     		}
     	}
     	

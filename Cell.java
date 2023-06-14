@@ -16,8 +16,8 @@ public class Cell {
     Object minFirstColumn;
     Object minSecondColumn;
 
-    public Cell(int x, int y, String tableName, String indexName){
-        firstBucket = new Bucket("Tables/" + tableName + "/Indexes/" + indexName + "/" + x + "_" + y + ".csv");
+    public Cell(int x, int y, String path){
+        firstBucket = new Bucket(path + "/" + x + "_" + y + ".csv");
     }
 
     public ArrayList<BucketEntry> getEntries(String clusteringKeyType){
@@ -100,4 +100,4 @@ public class Cell {
         deleteRow(key);
         insertRow(key, page);
     }
-    
+} 

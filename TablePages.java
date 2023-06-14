@@ -1,8 +1,5 @@
-
 import java.io.*;
 import java.util.ArrayList;
-
-import exceptions.DBAppException;
 
 public class TablePages implements Serializable {
 	String tableName;

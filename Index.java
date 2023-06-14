@@ -1,3 +1,5 @@
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -5,20 +7,28 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.Hashtable;
 import java.util.List;
+import java.util.Properties;
 
-import exceptions.DBAppException;
-import main.BucketEntry;
-import main.Cell;
-import main.Column;
-import main.Table;
 
 public class Index {
-    final int largestDivisions = Integer.parseInt(System.getProperty("indexDivisions"));
+    int largestDivisions = 0;
     ArrayList<ArrayList<Cell>> grid = new ArrayList<>();
     String tableName, indexName, clusteringKeyType;
+    String path;
     Column column1, column2;
 
     public Index(String tableName, String column1Name, String column2Name) throws DBAppException{
+            String Path = System.getProperty("user.dir");
+        String DBAppConfigPath = Path + "/resources" + "/DBApp.config";
+        Properties appProps = new Properties();
+        try {
+            appProps.load(new FileInputStream(DBAppConfigPath));
+            largestDivisions = Integer.parseInt(appProps.getProperty("maxIndexDivisions"));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+
         this.tableName = tableName;
         String column1Type = "", column2Type = "";
         Column[] columns = Table.getColumns(tableName);
@@ -30,7 +40,11 @@ public class Index {
             if (columns[i].clusteringKey)
                 clusteringKeyType = columns[i].type;
         }
-        this.indexName = column1.name + column2.name;
+        this.indexName = column1.name + column2.name + tableName;
+
+        path = System.getProperty("user.dir") + File.separator + "Indexes" + File.separator + indexName;
+        File file = new File(path);
+        file.mkdirs();
 
         int column1Divisions = largestDivisions, column2Divisions = largestDivisions;
         Object column1Range = null, column2Range = null, column1Min = null, column2Min = null;
@@ -98,7 +112,7 @@ public class Index {
 
         for (int i = 0; i < column1Divisions; i++) {
             for (int j = 0; j < column2Divisions; j++){
-                Cell cell = new Cell(i, j, tableName, indexName);
+                Cell cell = new Cell(i, j, path);
                 grid.get(i).add(cell);
                 switch(column1Type){
                     case "java.lang.Integer":
@@ -136,6 +150,7 @@ public class Index {
                 }
             }
         }
+    
     }
     public ArrayList<BucketEntry> getResult(SQLTerm[] terms){
         ArrayList<Cell> result = findCells(terms[0]);
@@ -199,16 +214,14 @@ public class Index {
         }
         return false;
     }
-    public int[] findPages(Hashtable<String, Comparable<Object>> row){
-        //TODO: get page from row
-        return new int[]{0};
-    }
+
     public void insert(Object key, Hashtable<String, Object> values, int page){
         getCellFromRow(values).insertRow(key, page);
     }
     public void delete(Object key, Hashtable<String, Object> values){
         getCellFromRow(values).deleteRow(key);
     }
+    
     private Cell getCellFromRow(Hashtable<String, Object> values){
         int x = grid.size(), y = grid.get(0).size();
         for (int i = 0; i < grid.size() - 1; i++) {
@@ -433,6 +446,10 @@ public class Index {
         }
   
        return -2;
+    }
+    public void update(Object clusteringkey, Hashtable<String, Object> values, int newPageNum) {
+        delete(clusteringkey, values);
+        insert(clusteringkey, values, newPageNum);
     }
 
 }

@@ -8,24 +8,24 @@ import java.util.Date;
 import java.util.Hashtable;
 import java.util.LinkedList;
 
-import exceptions.DBAppException;
-import main.Column;
+import com.opencsv.CSVReader;
+import com.opencsv.exceptions.CsvValidationException;
+
 
 public class Table{
     private final static String delimitter = ",";
     String name;
-    private int nextPage = 0;
 
     public Table(String name){
         this.name = name;
     }
     @SuppressWarnings("all")
-    public LinkedList<Hashtable<String, Comparable<Object>>> nextPage() throws DBAppException{
+    public LinkedList<Hashtable<String, Comparable<Object>>> nextPage(int page) throws DBAppException{
         BufferedReader br = null;
         LinkedList<Hashtable<String, Comparable<Object>>> rows = new LinkedList<>();
         Column[] columns = getColumns(name);
         try {
-            br = new BufferedReader(new FileReader(new File("Tables/" + name + "/" + nextPage + ".csv")));
+            br = new BufferedReader(new FileReader(new File("Tables/" + name + "/" + page + ".csv")));
             String line;
             while((line = br.readLine()) != null){
                 String[] values = line.split(delimitter);
@@ -54,7 +54,6 @@ public class Table{
         } catch (IOException e) {
             return null;
         }
-        nextPage++;
         return rows;
     }
     @SuppressWarnings("all")
@@ -94,41 +93,39 @@ public class Table{
         }
         return page;
     }
-    
-    public void resetPages(){
-        nextPage = 0;
-    }
 
     @SuppressWarnings("all")
     public static Column[] getColumns(String tableName) throws DBAppException{
-        BufferedReader br = null;
+        CSVReader reader = null;
         LinkedList<Column> columns = new LinkedList<>();
         try {
-            br = new BufferedReader(new FileReader(new File("metadata.csv")));
+            reader = new CSVReader(new FileReader(new File("metadata.csv")));
         
-            String line;
+            String[] line;
             columns = new LinkedList<>();
-            while((line = br.readLine()) != null){
-                String tName = line.split(delimitter)[0];
+            while((line = reader.readNext()) != null){
+                String tName = line[0];
                 if (tName.equals(tableName)){
                     Column col = new Column();
-                    col.name = line.split(delimitter)[1];
-                    col.type = line.split(delimitter)[2];
-                    col.clusteringKey = Boolean.parseBoolean(line.split(delimitter)[3]);
-                    col.indexName = line.split(delimitter)[4];
-                    col.indexType = line.split(delimitter)[5];
-                    col.min = line.split(delimitter)[6];
-                    col.max = line.split(delimitter)[7];
-                    col.foreignKey = Boolean.parseBoolean(line.split(delimitter)[8]);
-                    col.foreignTableName = line.split(delimitter)[9];
-                    col.foreignColumnName = line.split(delimitter)[10];
-                    col.computed = Boolean.parseBoolean(line.split(delimitter)[11]);
+                    col.name = line[1];
+                    col.type = line[2];
+                    col.clusteringKey = Boolean.parseBoolean(line[3]);
+                    col.indexName = line[4];
+                    col.indexType = line[5];
+                    col.min = line[6];
+                    col.max = line[7];
+                    col.foreignKey = Boolean.parseBoolean(line[8]);
+                    col.foreignTableName = line[9];
+                    col.foreignColumnName = line[10];
+                    col.computed = Boolean.parseBoolean(line[11]);
                     columns.addLast(col);
                 }
             }
-            br.close();
+            reader.close();
         } catch (IOException e) {
             throw new DBAppException("Couldn't find metadata.csv");
+        } catch (CsvValidationException e) {
+            e.printStackTrace();
         }
 
         if (columns.isEmpty())
