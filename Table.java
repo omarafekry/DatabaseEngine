@@ -20,15 +20,15 @@ public class Table{
         this.name = name;
     }
     @SuppressWarnings("all")
-    public LinkedList<Hashtable<String, Comparable<Object>>> nextPage(int page) throws DBAppException{
-        BufferedReader br = null;
+    public LinkedList<Hashtable<String, Comparable<Object>>> getPage(int page) throws DBAppException, NumberFormatException{
+        CSVReader reader = null;
         LinkedList<Hashtable<String, Comparable<Object>>> rows = new LinkedList<>();
         Column[] columns = getColumns(name);
         try {
-            br = new BufferedReader(new FileReader(new File("Tables/" + name + "/" + page + ".csv")));
-            String line;
-            while((line = br.readLine()) != null){
-                String[] values = line.split(delimitter);
+            reader = new CSVReader(new FileReader(new File("Tables/" + name + "/" + page + ".csv")));
+            String[] line = reader.readNext();
+            while((line = reader.readNext()) != null){
+                String[] values = line;
                 Hashtable<String, Comparable<Object>> row = new Hashtable<>();
                 for (int i = 0; i < columns.length; i++) {
                     if (columns[i].type.equals("java.lang.Integer"))
@@ -50,8 +50,8 @@ public class Table{
                 }
                 rows.addLast(row);
             }
-            br.close();
-        } catch (IOException e) {
+            reader.close();
+        } catch (IOException | CsvValidationException e) {
             return null;
         }
         return rows;

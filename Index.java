@@ -18,7 +18,7 @@ public class Index {
     Column column1, column2;
 
     public Index(String tableName, String column1Name, String column2Name) throws DBAppException{
-            String Path = System.getProperty("user.dir");
+        String Path = System.getProperty("user.dir");
         String DBAppConfigPath = Path + "/resources" + "/DBApp.config";
         Properties appProps = new Properties();
         try {
@@ -41,6 +41,8 @@ public class Index {
                 clusteringKeyType = columns[i].type;
         }
         this.indexName = column1.name + column2.name + tableName;
+        column1Type = column1.type;
+        column2Type = column2.type;
 
         path = System.getProperty("user.dir") + File.separator + "Indexes" + File.separator + indexName;
         File file = new File(path);
@@ -111,18 +113,19 @@ public class Index {
         }
 
         for (int i = 0; i < column1Divisions; i++) {
+            grid.add(new ArrayList<>());
             for (int j = 0; j < column2Divisions; j++){
                 Cell cell = new Cell(i, j, path);
                 grid.get(i).add(cell);
                 switch(column1Type){
                     case "java.lang.Integer":
-                    cell.minFirstColumn = (Integer)column1Min + column1Divisions * i;
+                    cell.minFirstColumn = (Integer)column1Min + (Integer)column1Range * i;
                     break;
                     case "java.lang.Double":
-                    cell.minFirstColumn = (Double)column1Min + column1Divisions * i;
+                    cell.minFirstColumn = (Double)column1Min + (Double)column1Range * i;
                     break;
                     case "java.lang.String":
-                    cell.minFirstColumn = (Integer)column1Min + column1Divisions * i;
+                    cell.minFirstColumn = (Integer)column1Min + (Integer)column1Range * i;
                     break;
                     case "java.util.Date":
                     LocalDateTime temp = (LocalDateTime)column1Min;
@@ -133,24 +136,25 @@ public class Index {
                 }
                 switch(column2Type){
                     case "java.lang.Integer":
-                    cell.minFirstColumn = (Integer)column2Min + column2Divisions * i;
+                    cell.minSecondColumn = (Integer)column2Min + (Integer)column2Range * j;
                     break;
                     case "java.lang.Double":
-                    cell.minFirstColumn = (Double)column2Min + column2Divisions * i;
+                    cell.minSecondColumn = (Double)column2Min + (Double)column2Range * j;
                     break;
                     case "java.lang.String":
-                    cell.minFirstColumn = (Integer)column2Min + column2Divisions * i;
+                    cell.minSecondColumn = (Integer)column2Min + (Integer)column2Range * j;
                     break;
                     case "java.util.Date":
                     LocalDateTime temp = (LocalDateTime)column2Min;
                     for (int k = 0; k < j; k++)
                         temp.plus((Duration)column2Range);
-                    cell.minFirstColumn = temp;
+                    cell.minSecondColumn = temp;
                     break;
                 }
             }
         }
-    
+        
+
     }
     public ArrayList<BucketEntry> getResult(SQLTerm[] terms){
         ArrayList<Cell> result = findCells(terms[0]);
@@ -223,38 +227,67 @@ public class Index {
     }
     
     private Cell getCellFromRow(Hashtable<String, Object> values){
-        int x = grid.size(), y = grid.get(0).size();
+        int x = grid.size() - 1, y = grid.get(0).size() - 1;
+        boolean foundx = false, foundy = false;
         for (int i = 0; i < grid.size() - 1; i++) {
             for (int j = 0; j < grid.get(i).size() - 1; j++) {
                 switch(column1.type){
                     case "java.lang.Integer":
-                    if ((Integer)(values.get(column1.name)) < (Integer)(grid.get(i + 1).get(j + 1)).minFirstColumn) x = i;
+                    if ((Integer)(values.get(column1.name)) < (Integer)(grid.get(i + 1).get(0)).minFirstColumn && !foundx){ 
+                        x = i;
+                        foundx = true;
+                    }
                     break;
                     case "java.lang.Double":
-                    if ((Double)(values.get(column1.name)) < (Double)(grid.get(i + 1).get(j + 1)).minFirstColumn) x = i;
+                    if ((Double)(values.get(column1.name)) < (Double)(grid.get(i + 1).get(0)).minFirstColumn && !foundx){ 
+                        x = i;
+                        foundx = true;
+                    }
                     break;
                     case "java.lang.String":
-                    if (((String)(values.get(column1.name))).length() < (Integer)(grid.get(i + 1).get(j + 1)).minFirstColumn) x = i;
+                    if (((String)(values.get(column1.name))).length() < (Integer)(grid.get(i + 1).get(0)).minFirstColumn && !foundx){
+                         x = i;
+                         foundx = true;
+                    }
                     break;
                     case "java.util.Date":
-                    if (((Date)(values.get(column1.name))).compareTo((Date)(grid.get(i + 1).get(j + 1)).minFirstColumn) < 0) x = i;
+                    if (((Date)(values.get(column1.name))).compareTo((Date)(grid.get(i + 1).get(0)).minFirstColumn) < 0 && !foundx){
+                         x = i;
+                         foundx = true;
+                    }
                     break;
                 }
                 switch(column2.type){
                     case "java.lang.Integer":
-                    if ((Integer)(values.get(column2.name)) < (Integer)(grid.get(i + 1).get(j + 1)).minSecondColumn) y = j;
+                    if ((Integer)(values.get(column2.name)) < (Integer)(grid.get(0).get(j + 1)).minSecondColumn && !foundy){
+                         y = j;
+                         foundy = true;
+                    }
                     break;
                     case "java.lang.Double":
-                    if ((Double)(values.get(column2.name)) < (Double)(grid.get(i + 1).get(j + 1)).minSecondColumn) y = j;
+                    if ((Double)(values.get(column2.name)) < (Double)(grid.get(0).get(j + 1)).minSecondColumn && !foundy){
+                         y = j;
+                         foundy = true;
+                    }
                     break;
                     case "java.lang.String":
-                    if (((String)(values.get(column2.name))).length() < (Integer)(grid.get(i + 1).get(j + 1)).minSecondColumn) y = j;
+                    if (((String)(values.get(column2.name))).length() < (Integer)(grid.get(0).get(j + 1)).minSecondColumn && !foundy){
+                         y = j;
+                         foundy = true;
+                    }
                     break;
                     case "java.util.Date":
-                    if (((Date)(values.get(column2.name))).compareTo((Date)(grid.get(i + 1).get(j + 1)).minSecondColumn) < 0) y = j;
+                    if (((Date)(values.get(column2.name))).compareTo((Date)(grid.get(0).get(j + 1)).minSecondColumn) < 0 && !foundy){
+                         y = j;
+                         foundy = true;
+                    }
                     break;
                 }
+                if (foundx && foundy)
+                    break;
             }
+            if (foundx && foundy)
+                    break;
         }
         return grid.get(x).get(y);
     }

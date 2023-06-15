@@ -63,17 +63,18 @@ public class Cell {
                 new File(firstBucket.path).createNewFile();
             reader = new CSVReader(new FileReader(firstBucket.path));
             List<String[]> lines = reader.readAll();
-            for (int i = 0; i < lines.size(); i++) {
-                if (lines.get(i)[1].equals("" + page)){
-                    lines.add(i, new String[]{key.toString(), "" + page});
-                    CSVWriter writer = new CSVWriter(new FileWriter(firstBucket.path));
-                    writer.writeAll(lines);
-                    break;
-                }
-            }
+            // for (int i = 0; i < lines.size(); i++) {
+            //     if (lines.get(i)[1].equals("" + page)){
+            //         lines.add(i, new String[]{key.toString(), "" + page});
+            //         CSVWriter writer = new CSVWriter(new FileWriter(firstBucket.path));
+            //         writer.writeAll(lines);
+            //         break;
+            //     }
+            // }
             lines.add(new String[]{key.toString(), "" + page});
             CSVWriter writer = new CSVWriter(new FileWriter(firstBucket.path));
             writer.writeAll(lines);
+            writer.close();
         } catch(IOException | CsvException e){
             e.printStackTrace();
         }
