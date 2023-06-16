@@ -9,7 +9,11 @@ import java.util.Hashtable;
 import java.util.List;
 import java.util.Properties;
 
+import exceptions.DBAppException;
+import main.BucketEntry;
 import main.Cell;
+import main.Column;
+import main.Table;
 
 
 public class Index {
@@ -424,6 +428,34 @@ public class Index {
     	return -1;
     }
 
+    public int findPageforUpdate(Hashtable<String, Object> values) throws IOException, DBAppException {
+    	Column clusteringKey = Table.getClusteringKey(tableName);
+    	ArrayList<Cell> requiredCells = new ArrayList<Cell>();
+    	
+    	requiredCells = getCells(values);
+    
+    	int PageNumber = -1;
+    	List<BucketEntry> cellContents;
+    	
+    	for(Cell c : requiredCells) {
+    		cellContents = c.getEntries(clusteringKey.type);
+    	
+    		Object cellValue = null;
+    		
+    		for(BucketEntry be : cellContents) {
+    			
+    			cellValue = be.key;
+	    		
+	    		if(Compare(cellValue, values.get(clusteringKey.name)) == 0) {
+	    			PageNumber = be.page;
+	    		}
+	 
+    		}
+    	}
+    	
+    	return PageNumber;
+    }
+    
     public Object setType(String type, String value) {
     	Object result = null;
     	
