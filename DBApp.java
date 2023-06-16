@@ -13,6 +13,12 @@ import com.opencsv.CSVReader;
 import com.opencsv.CSVWriter;
 import com.opencsv.exceptions.CsvException;
 
+import exceptions.DBAppException;
+import main.Column;
+import main.Index;
+import main.Table;
+import main.TablePages;
+
 
 public class DBApp {
 	ArrayList<Index> indexes = new ArrayList<>();
@@ -385,8 +391,8 @@ public class DBApp {
 	}
 	
 	public void updateTable(String strTableName, 
-							String strClusteringKeyValue,
-							Hashtable<String,Object> htblColNameValue ) throws DBAppException, IOException, CsvException {
+			String strClusteringKeyValue,
+			Hashtable<String,Object> htblColNameValue ) throws DBAppException, IOException {
 
 		if(!tableExists(strTableName)) {
 		throw new DBAppException("The table " + strTableName + " does not exist");
@@ -398,15 +404,14 @@ public class DBApp {
 		Index index = null;
 		int keyColNum = -1;
 		
-		if(!checkType(clusteringKey.type, strClusteringKeyValue)) {
-			throw new DBAppException("The clustering key value has an incorrect data type");
+		if(!checkType(strClusteringKeyValue, clusteringKey.type)) {
+		throw new DBAppException("The clustering key value has an incorrect data type");
 		}
 		
 		Object keyValue = setType(strClusteringKeyValue, clusteringKey.type);
 		
 		for(TablePages tp: tablePagesInfo) {
-			if (strTableName.equals(tp.tableName))
-				pagesInfo = tp;
+		pagesInfo = tp;
 		}
 		
 		for(int i=0; i<header.length; i++) {
@@ -422,7 +427,14 @@ public class DBApp {
 		}		
 		
 		int updatePage = -1;
-		if(index!=null) {
+		if(index!=null) {	
+		Hashtable<String,Object> values = new Hashtable<String,Object>();
+		values.put(clusteringKey.name, keyValue);
+		updatePage = index.findPageforUpdate(values);
+		
+		if(updatePage == -1) {
+		throw new DBAppException("The given clustering key does not exist");
+		}
 		
 		}
 		else {
@@ -436,13 +448,14 @@ public class DBApp {
 		}
 		
 		if(updatePage==-1) {
-			updatePage = allPages.get(allPages.size()-1);
+		updatePage = allPages.get(allPages.size()-1);
 		}
 		}
-		
+		boolean found = false;
 		List<String[]> Rows = readPage(strTableName, updatePage);
 		for(String[] r : Rows) {
 		if(r[keyColNum].equals(strClusteringKeyValue)) {
+		found = true;
 		for(int i=0; i<header.length; i++) {
 			Object value = htblColNameValue.get(header[i]);
 			if(value!=null) {
@@ -455,8 +468,13 @@ public class DBApp {
 		
 		}
 		}
-		writePage(strTableName, updatePage, Rows);
+		
+		if(!found) {
+		throw new DBAppException("The given clustering key does not exist");
 		}
+		
+		writePage(strTableName, updatePage, Rows);
+	}
 
 	
 	public void deleteFromTable(String strTableName, Hashtable<String,Object> htblColNameValue) throws DBAppException, IOException, CsvException{
@@ -1310,7 +1328,7 @@ public class DBApp {
     	return result;
     } 
     
-    public int Compare(Object value1, Object value2) {
+public int Compare(Object value1, Object value2) {
     	
         if(value1 instanceof Integer && value2 instanceof Integer) {
         	if ((Integer)(value1) < (Integer)(value2)){
@@ -1333,13 +1351,16 @@ public class DBApp {
         }
         
         if(value1 instanceof String && value2 instanceof String) {
-        	if (((String) value1).length() < ((String)value2).length()){
+        	if(value1.equals(value2)) {
+        		return 0;
+        	}
+        	if (((String) value1).length() <= ((String)value2).length()){
                return -1;
             }
         	if (((String) value1).length() > ((String)value2).length()){
                 return 1;
              }
-        	return 0;
+        	
         }
         
         if(value1 instanceof Date && value2 instanceof Date) {

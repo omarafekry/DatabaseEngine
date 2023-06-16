@@ -9,6 +9,8 @@ import java.util.Hashtable;
 import java.util.List;
 import java.util.Properties;
 
+import main.Cell;
+
 
 public class Index {
     int largestDivisions = 0;
@@ -293,82 +295,81 @@ public class Index {
     }
 
     public ArrayList<Cell> getCells(Hashtable<String, Object> values){
- 	   boolean col1 = false;
- 	   if(values.get(column1.name) != null) {
- 		   col1 = true;
- 	   }
+  	   boolean col1 = false;
+  	   if(values.get(column1.name) != null) {
+  		   col1 = true;
+  	   }
 
- 	   ArrayList<Cell> result = new ArrayList<Cell>();
- 	   
-        for (int i = 0; i < grid.size() - 1; i++) {
-     	   boolean found1 = false, found2 = false;
-            for (int j = 0; j < grid.get(i).size() - 1; j++) {
-         	   if(col1) {
- 	        	   switch(column1.type){
- 	               case "java.lang.Integer":
- 	                    if ((Integer)(values.get(column1.name)) < (Integer)(grid.get(i + 1).get(j + 1)).minFirstColumn){
- 	                        found1 = true;
- 	                    } break;
- 	               case "java.lang.Double":
- 	                   if ((Double)(values.get(column1.name)) < (Double)(grid.get(i + 1).get(j + 1)).minFirstColumn){
- 	                       found1 = true;
- 	                   } break;
- 	               case "java.lang.String":
- 	                   if (((String)values.get(column1.name)).length() < ((String)(grid.get(i + 1).get(j + 1)).minFirstColumn).length()){
- 	                   		found1 = true;
- 	                   } break;
- 	               case "java.util.Date":
- 	                   if (((Date)values.get(column1.name)).before((Date)(grid.get(i + 1).get(j + 1)).minFirstColumn)){
- 	                   		found1 = true;
- 	                   } break;
- 	        	   }
-         	   }
-         	   else {
- 	                switch(column2.type){
- 	                case "java.lang.Integer":
- 		                if ((Integer)(values.get(column2.name)) < (Integer)(grid.get(i + 1).get(j + 1)).minSecondColumn){
- 		                	found2 = true;
- 		                } break;
- 	                case "java.lang.Double":
- 	                    if ((Double)(values.get(column2.name)) < (Double)(grid.get(i + 1).get(j + 1)).minSecondColumn){
- 	                    	found2 = true;
- 	                    } break;
- 	                case "java.lang.String":
- 	                    if (((String)values.get(column2.name)).length() < ((String)(grid.get(i + 1).get(j + 1)).minSecondColumn).length()){
- 	                    	found2 = true;
- 	                    } break;
- 	                case "java.util.Date":
- 	                	if (((Date)values.get(column2.name)).before((Date)(grid.get(i + 1).get(j + 1)).minSecondColumn)){
- 	                		found2 = true;
- 	                    } break;
- 	                }
-         	   }     
- 	                
- 	                if(found1 && col1) {
- 	                	result = grid.get(i);
- 	                	return result;   
- 	                }	
- 	                
- 	                if(found2 && !col1) {
- 	             	   result.add(grid.get(i).get(j));
- 	             	   break;
- 	                }
-            }
-        }
-        
-        if(col1)
-     	   return grid.get(grid.size()-1);
-        
-        if(result.size()==0) {
-     	   for (int i = 0; i < grid.size(); i++) {
-     		   int size = grid.get(i).size();
-     		   result.add(grid.get(i).get(size-1));
-     	   }
-        }
-
-        return result;
-    
-    } 		
+  	   ArrayList<Cell> result = new ArrayList<Cell>();
+  	   
+         for (int i = 0; i < grid.size() - 1; i++) {
+      	   boolean found1 = false, found2 = false;
+             for (int j = 0; j < grid.get(i).size() - 1; j++) {
+          	   if(col1) {
+  	        	   switch(column1.type){
+  	               case "java.lang.Integer":
+  	                    if ((Integer)(values.get(column1.name)) < (Integer)(grid.get(i + 1).get(0)).minFirstColumn){
+  	                        found1 = true;
+  	                    } break;
+  	               case "java.lang.Double":
+  	                   if ((Double)(values.get(column1.name)) < (Double)(grid.get(i + 1).get(0)).minFirstColumn){
+  	                       found1 = true;
+  	                   } break;
+  	               case "java.lang.String":
+  	                   if (((String)values.get(column1.name)).length() < ((String)(grid.get(i + 1).get(0)).minFirstColumn).length()){
+  	                   		found1 = true;
+  	                   } break;
+  	               case "java.util.Date":
+  	                   if (((Date)values.get(column1.name)).before((Date)(grid.get(i + 1).get(0)).minFirstColumn)){
+  	                   		found1 = true;
+  	                   } break;
+  	        	   }
+          	   }
+          	   else {
+  	                switch(column2.type){
+  	                case "java.lang.Integer":
+  		                if ((Integer)(values.get(column2.name)) < (Integer)(grid.get(0).get(j + 1)).minSecondColumn){
+  		                	found2 = true;
+  		                } break;
+  	                case "java.lang.Double":
+  	                    if ((Double)(values.get(column2.name)) < (Double)(grid.get(0).get(j + 1)).minSecondColumn){
+  	                    	found2 = true;
+  	                    } break;
+  	                case "java.lang.String":
+  	                    if (((String)values.get(column2.name)).length() < ((String)(grid.get(0).get(j + 1)).minSecondColumn).length()){
+  	                    	found2 = true;
+  	                    } break;
+  	                case "java.util.Date":
+  	                	if (((Date)values.get(column2.name)).before((Date)(grid.get(0).get(j + 1)).minSecondColumn)){
+  	                		found2 = true;
+  	                    } break;
+  	                }
+          	   }     
+  	                
+  	                if(found1 && col1) {
+  	                	result = grid.get(i);
+  	                	return result;   
+  	                }	
+  	                
+  	                if(found2 && !col1) {
+  	             	   result.add(grid.get(i).get(j));
+  	             	   break;
+  	                }
+             }
+         }
+         
+         if(col1)
+      	   return grid.get(grid.size()-1);
+         
+         if(result.size()==0) {
+      	   for (int i = 0; i < grid.size(); i++) {
+      		   int size = grid.get(i).size();
+      		   result.add(grid.get(i).get(size-1));
+      	   }
+         }   
+         return result;
+     
+     } 		
     
     public int findPageforInsertion(Hashtable<String, Object> values) throws IOException, DBAppException {
     	Column clusteringKey = Table.getClusteringKey(tableName);
@@ -459,13 +460,16 @@ public class Index {
         }
         
         if(value1 instanceof String && value2 instanceof String) {
-        	if (((String) value1).length() < ((String)value2).length()){
+        	if(value1.equals(value2)) {
+        		return 0;
+        	}
+        	if (((String) value1).length() <= ((String)value2).length()){
                return -1;
             }
         	if (((String) value1).length() > ((String)value2).length()){
                 return 1;
              }
-        	return 0;
+        	
         }
         
         if(value1 instanceof Date && value2 instanceof Date) {
