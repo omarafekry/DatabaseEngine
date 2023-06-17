@@ -84,8 +84,10 @@ public class Cell {
 
     public void deleteRow(Object key) {
         CSVReader reader = null;
+        CSVWriter writer = null;
         try{
             reader = new CSVReader(new FileReader(firstBucket.path));
+            writer = new CSVWriter(new FileWriter(firstBucket.path));
             List<String[]> lines = reader.readAll();
             for (String[] strings : lines) {
                 if (strings[0].equals("" + key.toString())){
@@ -93,6 +95,11 @@ public class Cell {
                     break;
                 }
             }
+            writer.writeAll(lines);
+            reader.close();
+            writer.close();
+            if (lines.size() == 0)
+                new File(firstBucket.path).delete();
         } catch(IOException | CsvException e){
             e.printStackTrace();
         }

@@ -1,4 +1,3 @@
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
@@ -9,11 +8,11 @@ import java.util.Hashtable;
 import java.util.LinkedList;
 
 import com.opencsv.CSVReader;
+import com.opencsv.exceptions.CsvException;
 import com.opencsv.exceptions.CsvValidationException;
 
 
 public class Table{
-    private final static String delimitter = ",";
     String name;
 
     public Table(String name){
@@ -58,14 +57,14 @@ public class Table{
     }
     @SuppressWarnings("all")
     public static Hashtable<Object, Hashtable<String, Comparable<Object>>> getPageHashtable(String tableName, int pageNumber) throws DBAppException{
-        BufferedReader br = null;
+        CSVReader reader = null;
         Hashtable<Object, Hashtable<String, Comparable<Object>>> page = new Hashtable<>();
         Column[] columns = getColumns(tableName);
         try {
-            br = new BufferedReader(new FileReader(new File("Tables/" + tableName + "/" + pageNumber + ".csv")));
-            String line;
-            while((line = br.readLine()) != null){
-                String[] values = line.split(delimitter);
+            reader = new CSVReader(new FileReader(new File("Tables/" + tableName + "/" + pageNumber + ".csv")));
+            String[] line = reader.readNext();
+            while((line = reader.readNext()) != null){
+                String[] values = line;
                 Hashtable<String, Comparable<Object>> row = new Hashtable<>();
                 for (int i = 0; i < columns.length; i++) {
                     if (columns[i].type.equals("java.lang.Integer"))
@@ -87,8 +86,8 @@ public class Table{
                 }
                 page.put(row.get(columns[0].name), row);
             }
-            br.close();
-        } catch (IOException e) {
+            reader.close();
+        } catch (IOException | CsvException e) {
             return null;
         }
         return page;

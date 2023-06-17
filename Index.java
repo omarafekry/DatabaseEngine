@@ -9,12 +9,6 @@ import java.util.Hashtable;
 import java.util.List;
 import java.util.Properties;
 
-import exceptions.DBAppException;
-import main.BucketEntry;
-import main.Cell;
-import main.Column;
-import main.Table;
-
 
 public class Index {
     int largestDivisions = 0;
@@ -183,8 +177,8 @@ public class Index {
             for (int i = 0; i < grid.size(); i++){
                 //finding the exact value row
                 if (i < grid.get(0).size() - 1 
-                && compareObjects((Comparable<Object>)grid.get(i).get(0).minSecondColumn, "<=", (Comparable<Object>)term._objValue)
-                && compareObjects((Comparable<Object>)grid.get(i+1).get(0).minSecondColumn, ">", (Comparable<Object>)term._objValue)){
+                && compareObjects((Comparable<Object>)grid.get(i).get(0).minFirstColumn, "<=", (Comparable<Object>)term._objValue)
+                && compareObjects((Comparable<Object>)grid.get(i+1).get(0).minFirstColumn, ">", (Comparable<Object>)term._objValue)){
                     result.addAll(grid.get(i));
                     continue;
                 }

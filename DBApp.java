@@ -13,12 +13,6 @@ import com.opencsv.CSVReader;
 import com.opencsv.CSVWriter;
 import com.opencsv.exceptions.CsvException;
 
-import exceptions.DBAppException;
-import main.Column;
-import main.Index;
-import main.Table;
-import main.TablePages;
-
 
 public class DBApp {
 	ArrayList<Index> indexes = new ArrayList<>();
@@ -49,10 +43,17 @@ public class DBApp {
 
 		// dbApp.insertIntoTable("Product", row);
 		// row = new Hashtable<>();
+		// row.put("ProductID", 2);
+		// row.put("ProductName", "Laban");
+		// row.put("ProductPrice", 50d);
+
+		// dbApp.insertIntoTable("Product", row);
+		// row = new Hashtable<>();
 		// row.put("ProductID", 3);
 		// row.put("ProductName", "Tea");
 		// row.put("ProductPrice", 25d);
 
+		
 		// dbApp.insertIntoTable("Product", row);
 		// row = new Hashtable<>();
 		// row.put("ProductID", 4);
@@ -61,22 +62,22 @@ public class DBApp {
 
 		// dbApp.insertIntoTable("Product", row);
 
-		// SQLTerm[] terms = new SQLTerm[1];
-		// SQLTerm term = new SQLTerm();
-		// term._objValue = "Tea";
-		// term._strColumnName = "ProductName";
-		// term._strOperator = "<";
-		// term._strTableName = "Product";
-		// terms[0] = term;
+		SQLTerm[] terms = new SQLTerm[1];
+		SQLTerm term = new SQLTerm();
+		term._objValue = 4;
+		term._strColumnName = "ProductID";
+		term._strOperator = "<";
+		term._strTableName = "Product";
+		terms[0] = term;
 
-		// Iterator<Hashtable<String, Object>> it = dbApp.selectFromTable(terms, new String[]{});
-		// while(it.hasNext()){
-		// 	Hashtable<String, Object> result = it.next();
-		// 	for (Map.Entry<String, Object> entry : result.entrySet()) {
-		// 		System.out.print(entry.getValue() + ", "); 
-		// 	}
-		// 	System.out.println();
-		// }
+		Iterator<Hashtable<String, Object>> it = dbApp.selectFromTable(terms, new String[]{});
+		while(it.hasNext()){
+			Hashtable<String, Object> result = it.next();
+			for (Map.Entry<String, Object> entry : result.entrySet()) {
+				System.out.print(entry.getValue() + ", ");
+			}
+			System.out.println();
+		}
 
 		
 
@@ -84,8 +85,11 @@ public class DBApp {
 		// delete.put("ProductName", "Milka");
 		// dbApp.deleteFromTable("Product", delete);
 
-		dbApp.createIndex("Product", new String[]{"ProductID", "ProductPrice"});
-		
+		//dbApp.createIndex("Product", new String[]{"ProductID", "ProductPrice"});
+		// Hashtable<String, Object> row = new Hashtable<>();
+		// row.put("ProductID", 2);
+
+		//dbApp.deleteFromTable("Product", row);
 		
 
 	}
@@ -206,12 +210,12 @@ public class DBApp {
 			for (int i = 0; i < lines.size(); i++) {
 				if(lines.get(i)[0].equals(strTableName)){
 					if(lines.get(i)[1].equals(strarrColName[0]) || lines.get(i)[1].equals(strarrColName[1])){
-						//if(lines.get(i)[4].equals("")){
+						if(lines.get(i)[4].equals("")){
 							lines.get(i)[4] = strarrColName[0] + strarrColName[1] + strTableName;
 							lines.get(i)[5] = "grid";
-						//}
-						//else
-						//	throw new DBAppException("el column "+strarrColName[0]+" aw "+strarrColName[1]+" 3ando index");
+						}
+						else
+							throw new DBAppException("el column "+strarrColName[0]+" aw "+strarrColName[1]+" 3ando index");
 					}
 				}
 			}
@@ -261,7 +265,6 @@ public class DBApp {
 		
 		String[] header = getHeader(strTableName);
 		Column clusteringKey = Table.getClusteringKey(strTableName);
-		System.out.println(clusteringKey.name);
 		Object keyValue = htblColNameValue.get(clusteringKey.name);
 		int keyColNum = 0;
 		TablePages pagesInfo = null;
@@ -315,6 +318,9 @@ public class DBApp {
 			boolean found = false;
 			for(int i=1; i< Rows.size(); i++) {
 			
+				if(!found && Compare(keyValue, setType(Rows.get(i)[keyColNum], clusteringKey.type))==0) {
+					throw new DBAppException("The clustering key " + keyValue + " already exists");
+				}
 				if(!found && Compare(keyValue, setType(Rows.get(i)[keyColNum], clusteringKey.type))==-1) {
 					newRows.add(rowtoInsert);
 					found = true;
@@ -326,13 +332,20 @@ public class DBApp {
 			if(!found) {
 				newRows.add(rowtoInsert);
 			}
-			
+			for(Index i: indexes) {
+				if(strTableName.equals(i.tableName)){
+					i.insert(keyValue, htblColNameValue, insertionPage);
+				}
+			}
 			if(newRows.size() > MaximumRowsCountinTablePage+1) {
 				pushDownTable(strTableName, insertionPage,  newRows.remove(newRows.size()-1), pagesInfo);
 			}
+			else{
+				writePage(strTableName, insertionPage, newRows);
+			}
 		}
 		else {
-			System.out.println("entered insertion without index");
+			//System.out.println("entered insertion without index");
 			ArrayList<Integer> allPages = pagesInfo.getAllPages();
 			int insertionPage = -1;
 			
@@ -356,7 +369,7 @@ public class DBApp {
 			newRows.add(Rows.get(0));
 			boolean found = false;
 			for(int i=1; i< Rows.size(); i++) {
-				System.out.println(setType(Rows.get(i)[keyColNum], clusteringKey.type));
+				//System.out.println(setType(Rows.get(i)[keyColNum], clusteringKey.type));
 				if(!found && Compare(keyValue, setType(Rows.get(i)[keyColNum], clusteringKey.type))==0) {
 					throw new DBAppException("The clustering key " + keyValue + " already exists");
 				}
@@ -395,7 +408,7 @@ public class DBApp {
 			Hashtable<String,Object> htblColNameValue ) throws DBAppException, IOException {
 
 		if(!tableExists(strTableName)) {
-		throw new DBAppException("The table " + strTableName + " does not exist");
+			throw new DBAppException("The table " + strTableName + " does not exist");
 		}
 		
 		String[] header = getHeader(strTableName);
@@ -404,69 +417,83 @@ public class DBApp {
 		Index index = null;
 		int keyColNum = -1;
 		
-		if(!checkType(strClusteringKeyValue, clusteringKey.type)) {
-		throw new DBAppException("The clustering key value has an incorrect data type");
+		if(!checkType(clusteringKey.type, strClusteringKeyValue)) {
+			throw new DBAppException("The clustering key value has an incorrect data type");
 		}
 		
 		Object keyValue = setType(strClusteringKeyValue, clusteringKey.type);
 		
+		if (htblColNameValue.get(clusteringKey.name) != null){
+			throw new DBAppException("you cant update the clustering key, rakezzzzz");
+		}
+
 		for(TablePages tp: tablePagesInfo) {
-		pagesInfo = tp;
+			if (tp.tableName.equals(strTableName))
+				pagesInfo = tp;
 		}
 		
 		for(int i=0; i<header.length; i++) {
-		if(clusteringKey.name.equals(header[i])) {
-		keyColNum=i;
-		}
+			if(clusteringKey.name.equals(header[i])) {
+				keyColNum=i;
+			}
 		}
 		
 		for(Index i: indexes) {
-		if(strTableName.equals(i.tableName) && (clusteringKey.name.equals(i.column1.name) || clusteringKey.name.equals(i.column2.name))) {
-		index = i;
-		}
+			if(strTableName.equals(i.tableName) && (clusteringKey.name.equals(i.column1.name) || clusteringKey.name.equals(i.column2.name))) {
+				index = i;
+			}
 		}		
 		
 		int updatePage = -1;
 		if(index!=null) {	
-		Hashtable<String,Object> values = new Hashtable<String,Object>();
-		values.put(clusteringKey.name, keyValue);
-		updatePage = index.findPageforUpdate(values);
-		
-		if(updatePage == -1) {
-		throw new DBAppException("The given clustering key does not exist");
-		}
+			Hashtable<String,Object> values = new Hashtable<String,Object>();
+			values.put(clusteringKey.name, keyValue);
+			updatePage = index.findPageforUpdate(values);
+			
+			if(updatePage == -1) {
+				throw new DBAppException("The given clustering key does not exist");
+			}
 		
 		}
 		else {
-		ArrayList<Integer> allPages = pagesInfo.getAllPages();
-		
-		for(int i=0; i<allPages.size(); i++) {
-		List<String[]> Rows = readPage(strTableName, allPages.get(i));
-		if(Compare(keyValue, setType(Rows.get(Rows.size()-1)[keyColNum], clusteringKey.type))==-1) {
-			updatePage = allPages.get(i);
-		}
-		}
-		
-		if(updatePage==-1) {
-		updatePage = allPages.get(allPages.size()-1);
-		}
-		}
-		boolean found = false;
-		List<String[]> Rows = readPage(strTableName, updatePage);
-		for(String[] r : Rows) {
-		if(r[keyColNum].equals(strClusteringKeyValue)) {
-		found = true;
-		for(int i=0; i<header.length; i++) {
-			Object value = htblColNameValue.get(header[i]);
-			if(value!=null) {
-				if(!iscorrectType(strTableName, header[i], value)) {
-					throw new DBAppException("The value for column " + header[i] + " has an incorrect data type");
+			ArrayList<Integer> allPages = pagesInfo.getAllPages();
+			for(int i=0; i<allPages.size(); i++) {
+				List<String[]> Rows = null;
+				try {
+					Rows = readPage(strTableName, allPages.get(i));
+				} catch (CsvException e) {
+					e.printStackTrace();
 				}
-				r[i] = value+"";
+				if(Compare(keyValue, setType(Rows.get(Rows.size()-1)[keyColNum], clusteringKey.type))==-1) {
+					updatePage = allPages.get(i);
+				}
+			}
+			
+			if(updatePage==-1) {
+				updatePage = allPages.get(allPages.size()-1);
 			}
 		}
-		
+		boolean found = false;
+		List<String[]> Rows = null;
+		try {
+			Rows = readPage(strTableName, updatePage);
+		} catch (CsvException e) {
+			e.printStackTrace();
 		}
+		for(String[] r : Rows) {
+			if(r[keyColNum].equals(strClusteringKeyValue)) {
+				found = true;
+				for(int i=0; i<header.length; i++) {
+					Object value = htblColNameValue.get(header[i]);
+					if(value!=null) {
+						if(!iscorrectType(strTableName, header[i], value)) {
+							throw new DBAppException("The value for column " + header[i] + " has an incorrect data type");
+						}
+						r[i] = value+"";
+					}
+				}
+		
+			}
 		}
 		
 		if(!found) {
@@ -486,7 +513,8 @@ public class DBApp {
 		
 		Enumeration<String> keys = htblColNameValue.keys();
 		String key;
-		
+		ArrayList<Index> tableIndexes = getTableIndexes(strTableName);
+		boolean indexShouldBeUsed = false;
 		//check if the columns are actually in the table and check if the type of the values are correct
 		while(keys.hasMoreElements()) {
 			key = (String)keys.nextElement();
@@ -499,6 +527,12 @@ public class DBApp {
 			if(!iscorrectType(strTableName, key, value)) {
 				throw new DBAppException("The value of column " + key + " is an incorrect data type");
 			}
+
+			for (int i = 0; i < tableIndexes.size(); i++) {
+				if (tableIndexes.get(i).column1.name.equals(key) || tableIndexes.get(i).column2.name.equals(key))
+					indexShouldBeUsed = true;
+			}
+		
 		}
 		
 		// get path of the table folder
@@ -506,8 +540,10 @@ public class DBApp {
 		//get all of pages in the table
 		ArrayList<Integer> pages = null;
 
-		ArrayList<Index> tableIndexes = getTableIndexes(strTableName);
-		if (tableIndexes.size() > 0){
+
+		
+
+		if (indexShouldBeUsed){
 
 			//convert hashtable of column values to sqlterms
 			SQLTerm[] terms = new SQLTerm[htblColNameValue.size()];
@@ -530,11 +566,12 @@ public class DBApp {
 			ArrayList<SQLTermCollection> termCollections = getCollectedTerms(terms, operators);
 			
 			//initialize result with the output of the first term
-			pages = new ArrayList<>(pages);
+			pages = new ArrayList<>();
 			//get rest of terms' outputs
 			ArrayList<BucketEntry> entries = termCollections.get(0).index.getResult(termCollections.get(0).terms);
-			for (int i = 0; i < entries.size(); i++) 
-				pages.add(entries.get(i).page);
+			for (int i = 0; i < entries.size(); i++)
+				if (!pages.contains(entries.get(i).page))
+					pages.add(entries.get(i).page);
 			
 			for (int i = 1; i < operators.length - 1; i++) {
 				ArrayList<Integer> tempPages = new ArrayList<>();
@@ -593,11 +630,28 @@ public class DBApp {
 				
 				if(valuesFound) {
 					toBeRemoved.add(pageRows.get(i));
-				}	
+				}
 				
 				valuesFound = true;
 			}
 			
+			ArrayList<Index> tableIndexes = getTableIndexes(strTableName);
+
+			for (int i = 0; i < toBeRemoved.size(); i++) {
+				Column[] columns = Table.getColumns(strTableName);
+				Hashtable<String, Object> row = new Hashtable<>();
+				Object keyValue = null;
+				for (int j = 0; j < columns.length; j++) {
+					row.put(columns[j].name, setType(toBeRemoved.get(i)[j], columns[j].type));
+					if (columns[j].clusteringKey)
+						keyValue = setType(toBeRemoved.get(i)[j], columns[j].type);
+				}
+
+				for (int j = 0; j < tableIndexes.size(); j++) 
+					tableIndexes.get(j).delete(keyValue, row);
+				
+			}
+
 			//delete the rows that should be deleted 
 			pageRows.removeAll(toBeRemoved);
 			
@@ -909,9 +963,9 @@ public class DBApp {
 		while(names.hasMoreElements()) {
 			String[] row = new String[12];
 			key = (String) names.nextElement();
-			System.out.println(key);
+			//System.out.println(key);
 			
-			System.out.println(key);
+			//System.out.println(key);
 			String type = htblColNameType.get(key);
 			String min = htblColNameMin.get(key);
 			String max = htblColNameMax.get(key);
@@ -962,13 +1016,13 @@ public class DBApp {
 		String Path = System.getProperty("user.dir");
 		Path = Path + File.separator + "metadata.csv";
 	   
-		System.out.println("metadataPath: " + Path);
+		//System.out.println("metadataPath: " + Path);
 	
 		FileWriter outputfile = new FileWriter(Path, true);
 		CSVWriter writer =  new CSVWriter(outputfile);
 			
 		for(int j=0; j<newMetaData.size(); j++) {
-			System.out.println(newMetaData.get(j)[1]);
+			//System.out.println(newMetaData.get(j)[1]);
 			writer.writeNext(newMetaData.get(j));
 		}
 			
@@ -1016,7 +1070,7 @@ public class DBApp {
 			}
 			
 			if(ForeginKey!=null) {
-				System.out.println(ForeginKey);
+				//System.out.println(ForeginKey);
 				if(!colExists(ForeginKey.split("[.]",0)[0], ForeginKey.split("[.]",0)[1])) {
 					throw new DBAppException("The Foregin Key " + ForeginKey + " does not exist");
 				}	
@@ -1117,13 +1171,12 @@ public class DBApp {
 		            SimpleDateFormat sdf = new SimpleDateFormat("dd.mm.yyyy");
 		            sdf.parse(value.toString());
 		        } catch (ParseException ex) {
-		        	System.out.println("date is not the right format");
-		        	return false;
+		        	throw new DBAppException("date is not the right format");
 		        }
 			return true;
 		}
 		
-		System.out.println("CorrectType: " + correctType);
+		//System.out.println("CorrectType: " + correctType);
 		
 		
 		if(correctType.equals("java.lang.Integer") && value instanceof Integer){
@@ -1328,7 +1381,7 @@ public class DBApp {
     	return result;
     } 
     
-public int Compare(Object value1, Object value2) {
+	public int Compare(Object value1, Object value2) {
     	
         if(value1 instanceof Integer && value2 instanceof Integer) {
         	if ((Integer)(value1) < (Integer)(value2)){
@@ -1375,7 +1428,5 @@ public int Compare(Object value1, Object value2) {
   
        return -2;
     }
-    
-    
 
 }
